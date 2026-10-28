@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>StoreGA · 門市人流系統</title>
+<meta name="description" content="StoreGA：ESP32 + 毫米波雷達 + Wi-Fi 探針的實體門市人流分析與自動限流系統。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Doto:wght@700;900&family=Geist+Mono:wght@400;500;600&family=Geist:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/base.css">
+<link rel="stylesheet" href="assets/css/app.css">
+<script>try{const t=localStorage.getItem('storega:theme');if(t&&t!=='""')document.documentElement.dataset.theme=JSON.parse(t)}catch{}</script>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<symbol id="home" viewBox="0 0 24 24"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+<symbol id="cube" viewBox="0 0 24 24"><path d="M21 16V8l-9-5-9 5v8l9 5 9-5z"/><path d="M3.3 7.5L12 12l8.7-4.5M12 22V12"/></symbol>
+<symbol id="chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 6-6"/></symbol>
+<symbol id="bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a2 2 0 0 0 3.4 0"/></symbol>
+<symbol id="cpu" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></symbol>
+<symbol id="cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+<symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
+<symbol id="warn" viewBox="0 0 24 24"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></symbol>
+<symbol id="plug" viewBox="0 0 24 24"><path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z"/></symbol>
+<symbol id="arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+<symbol id="check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></symbol>
+<symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+<symbol id="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+<symbol id="moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+<symbol id="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+<symbol id="wifi" viewBox="0 0 24 24"><path d="M5 12.6a10 10 0 0 1 14 0M8.5 16.1a5 5 0 0 1 7 0M2 8.8a15 15 0 0 1 20 0"/><path d="M12 20h.01"/></symbol>
+<symbol id="download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+<symbol id="users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></symbol>
+<symbol id="dash" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></symbol>
+<symbol id="trend" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-7"/><path d="M16 7h4v4"/></symbol>
+<symbol id="sliders" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
+<symbol id="pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></symbol>
+<symbol id="play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></symbol>
+<symbol id="layers" viewBox="0 0 24 24"><path d="M12 2l10 5-10 5L2 7z"/><path d="M2 12l10 5 10-5"/><path d="M2 17l10 5 10-5"/></symbol>
+<symbol id="reset" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></symbol>
+<symbol id="pin" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></symbol>
+<symbol id="zap" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9z"/></symbol>
+<symbol id="power" viewBox="0 0 24 24"><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/><path d="M12 2v10"/></symbol>
+<symbol id="x" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></symbol>
+<symbol id="copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+<symbol id="crit" viewBox="0 0 24 24"><path d="M7.9 2h8.2L22 7.9v8.2L16.1 22H7.9L2 16.1V7.9z"/><path d="M12 8v4M12 16h.01"/></symbol>
+<symbol id="info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+<symbol id="radar" viewBox="0 0 24 24"><path d="M19.1 4.9A10 10 0 1 0 22 12"/><path d="M16.2 7.8A6 6 0 1 0 18 12"/><circle cx="12" cy="12" r="2"/><path d="M13.4 10.6L19 5"/></symbol>
+<symbol id="door" viewBox="0 0 24 24"><path d="M13 4h3a2 2 0 0 1 2 2v14"/><path d="M2 20h3M13 20h9"/><path d="M10 12v.01"/><path d="M13 4.6v16.2a1 1 0 0 1-1.2 1L5 20V5.6a2 2 0 0 1 1.5-1.9l4-1A2 2 0 0 1 13 4.6z"/></symbol>
+<symbol id="bag" viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></symbol>
+<symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+<symbol id="target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+<symbol id="gauge" viewBox="0 0 24 24"><path d="M12 14l4-4"/><path d="M3.3 19a10 10 0 1 1 17.4 0"/></symbol>
+<symbol id="keyboard" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 16h10"/></symbol>
+<symbol id="store" viewBox="0 0 24 24"><path d="M3 9l1.5-5h15L21 9"/><path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/><path d="M5 12v8h14v-8"/><path d="M10 20v-5h4v5"/></symbol>
+<symbol id="shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+<symbol id="wave" viewBox="0 0 24 24"><path d="M2 12h3l3-8 4 16 3-8h7"/></symbol>
+<symbol id="rewind" viewBox="0 0 24 24"><path d="M11 19l-9-7 9-7v14z"/><path d="M22 19l-9-7 9-7v14z"/></symbol>
+<filter id="vblur" x="0" y="-20%" width="100%" height="140%"><feGaussianBlur stdDeviation="0 2.4"/></filter>
+</svg>
+<a class="skip" href="#main">跳到主要內容</a>
+<div class="app" id="app">
+  <aside class="rail" aria-label="側邊導覽">
+    <div class="logo"><div class="m"><i></i></div><div><b>StoreGA</b><span>人流與限流系統</span></div></div>
+    <button class="store" id="storeBtn" aria-haspopup="true"><span class="av">信</span><div>信義旗艦店<small>台北市 · 1F · 4 區</small></div><svg class="i" style="width:16px;color:var(--ink-4)"><use href="#chev"/></svg></button>
+    <nav class="nav" aria-label="主要頁面">
+      <a href="#overview" data-page="overview"><svg class="i"><use href="#home"/></svg><span>總覽</span></a>
+      <a href="#live" data-page="live"><svg class="i"><use href="#cube"/></svg><span>即時店況</span></a>
+      <a href="#analytics" data-page="analytics"><svg class="i"><use href="#chart"/></svg><span>分析</span></a>
+      <a href="#events" data-page="events"><svg class="i"><use href="#bell"/></svg><span>事件</span><b class="ct" data-badge="alerts" hidden>0</b></a>
+      <div class="navlbl label">管理</div>
+      <a href="#devices" data-page="devices"><svg class="i"><use href="#cpu"/></svg><span>裝置</span><b class="ct soft" data-badge="nodes">5</b></a>
+      <a href="#settings" data-page="settings"><svg class="i"><use href="#cog"/></svg><span>設定</span></a>
+    </nav>
+    <div class="foot" id="railFoot"><b><span class="chip live" style="height:20px;padding:0 7px;font-size:11px"><i></i><span id="srcTag">SIM</span></span><span id="srcName">模擬器運作中</span></b><span id="srcDesc">Aedes 模擬 · 5 個節點</span><br>最後更新 <span id="fresh">剛剛</span></div>
+    <div class="me"><span class="av">陳</span><div>陳怡安<small>店長 · 管理員</small></div><button class="collapse" id="collapse" aria-label="收合側欄" data-tt="收合側欄"><svg class="i" style="width:16px;transform:rotate(90deg)"><use href="#chev"/></svg></button></div>
+  </aside>
+
+  <div class="main">
+    <header class="bar">
+      <div class="crumb">信義旗艦店 <span>/</span> <b id="crumb">總覽</b></div>
+      <div class="pop"><button class="simbtn" id="simBtn" aria-haspopup="true" aria-expanded="false"><span class="sd"></span><span id="simLbl">模擬器 · 10×</span><svg class="i" style="width:14px"><use href="#chev"/></svg></button>
+        <div class="popv simpop" id="simPop" hidden role="dialog" aria-label="資料來源與模擬器">
+          <header><b>資料來源</b><a class="link" href="#settings/source">設定</a></header>
+          <div class="sp-body">
+            <div class="sp-row"><span>來源</span><b id="spSrc">模擬器（不需要硬體）</b></div>
+            <div class="sp-row"><span>模擬速度</span><div class="seg" role="group" aria-label="模擬速度" id="speedSeg"><span class="thumb"></span><button data-speed="1" aria-pressed="false">1×</button><button data-speed="10" aria-pressed="true">10×</button><button data-speed="60" aria-pressed="false">60×</button></div></div>
+            <div class="sp-lbl label">情境</div>
+            <div class="scn" id="scnList"></div>
+          </div>
+          <footer><button class="btn ghost sm" id="pauseBtn"><span class="isw" data-s="a"><svg class="i a" style="width:15px"><use href="#pause"/></svg><svg class="i b" style="width:15px"><use href="#play"/></svg></span><span class="mph" id="pauseLbl">暫停</span><span class="kbd">Space</span></button><button class="btn sec sm" id="toLive">回到即時</button></footer>
+        </div>
+      </div>
+      <button class="cmdk" aria-label="搜尋或執行指令"><svg class="i" style="width:16px"><use href="#search"/></svg><span>搜尋區域、節點、動作…</span><span class="kbd" id="cmdKey">⌘K</span></button>
+      <span class="live" id="clockBox" data-tt="模擬時間（真實時間 × 速度）"><i></i><span id="clk">--:--:--</span></span>
+      <button class="btn ghost icon" id="themeBtn" aria-label="切換夜間模式"><span class="isw" data-s="a"><svg class="i a"><use href="#moon"/></svg><svg class="i b"><use href="#sun"/></svg></span></button>
+      <div class="pop"><button class="btn ghost icon" id="bellBtn" aria-label="通知" aria-haspopup="true" aria-expanded="false" style="position:relative"><svg class="i"><use href="#bell"/></svg><span class="nb" hidden>0</span></button>
+        <div class="popv" id="bellPop" hidden role="dialog" aria-label="通知">
+          <header><b>未處理的告警</b><button class="btn ghost sm" id="ackAll">全部標為已處理</button></header>
+          <div class="nlist" id="bellList"></div>
+          <footer><span class="label" id="bellCount"></span><a class="btn sec sm" href="#events">查看所有事件</a></footer>
+        </div>
+      </div>
+    </header>
+
+    <main id="main" class="content" tabindex="-1">
+      <!-- ============ 總覽 ============ -->
+      <section class="page" id="p-overview" data-title="總覽" aria-label="總覽">
+        <div class="hello">
+          <div>
+            <span class="state" id="state"><i></i><span>營運正常</span></span>
+            <h1 id="headline">店內 <em>0</em> 人</h1>
+            <p id="predict"></p>
+          </div>
+          <div class="range">
+            <div class="pop"><div class="split"><button class="btn sec" id="expMain"><svg class="i" style="width:16px"><use href="#download"/></svg><span class="mph" id="expLbl">匯出 CSV</span></button><button class="btn sec" id="expMore" aria-label="選擇匯出格式" aria-haspopup="true" aria-expanded="false"><svg class="i" style="width:16px"><use href="#chev"/></svg></button></div>
+              <div class="menu right" id="expMenu" hidden role="menu"><button class="mi" role="menuitem" data-f="CSV">CSV 逐時報表<span class="kbd k">.csv</span></button><button class="mi" role="menuitem" data-f="JSON">JSON 原始資料<span class="kbd k">.json</span></button></div></div>
+          </div>
+        </div>
+        <div class="grid">
+          <section class="card hero" aria-label="場內人數">
+            <div style="position:relative;z-index:1">
+              <span class="label">場內人數 · 入口紅外線</span>
+              <div class="big"><b id="bigOcc">0</b><span id="bigCap">/40</span></div>
+              <div class="ticks" id="ticks" aria-hidden="true"></div>
+              <p class="sub" id="heroSub"></p>
+            </div>
+            <div class="hero-r">
+              <div class="facts">
+                <div><span class="label">今日進場</span><b><span id="fInV">0</span><small>人</small></b></div>
+                <div><span class="label">今日最高</span><b id="fPeak">0<small></small></b></div>
+                <div><span class="label">入口溫濕度</span><b id="fEnv">--</b></div>
+                <div><span class="label">Wi-Fi 校正</span><b id="fK">k 0.62</b></div>
+              </div>
+              <div><span class="label">近 90 分鐘</span><span class="flowkey"><span><i></i>今天</span><span><i class="y"></i>昨天</span></span><div class="flow-wrap"><svg class="flow" id="flow" viewBox="0 0 300 84" preserveAspectRatio="none" aria-hidden="true"></svg></div></div>
+            </div>
+            <span class="lim-note" id="limNote"></span>
+          </section>
+          <section class="card map" aria-label="四區即時分布">
+            <div class="card-h"><h3>此刻的人在哪</h3><a class="link" href="#live">開啟即時店況<svg class="i ar" viewBox="0 0 16 16"><path class="sh" d="M3 8h9.5"/><path class="hd" d="M8.5 4l4 4-4 4"/></svg></a></div>
+            <div class="mapwrap"><canvas id="map" aria-label="店面平面圖，點代表顧客位置"></canvas></div>
+            <div class="zlegend" id="zleg"></div>
+          </section>
+          <section class="card kpi" data-k="in"><div class="row"><span class="label">今日進場</span><svg class="i"><use href="#users"/></svg></div><div class="val"><span class="v" id="kIn">0</span><small>人</small></div><div class="foot"><span class="delta" id="kInD"></span><span class="cmp" id="kInC"></span></div><div class="spark-wrap"><svg viewBox="0 0 200 40" preserveAspectRatio="none" id="sIn"></svg></div></section>
+          <section class="card kpi" data-k="conv"><div class="row"><span class="label">轉換率</span><svg class="i"><use href="#bag"/></svg></div><div class="val"><span class="v" id="kConv">0</span><small>%</small></div><div class="foot"><span class="delta" id="kConvD"></span><span class="cmp" id="kConvC"></span></div><div class="spark-wrap"><svg viewBox="0 0 200 40" preserveAspectRatio="none" id="sConv"></svg></div></section>
+          <section class="card kpi" data-k="dwell"><div class="row"><span class="label">平均停留</span><svg class="i"><use href="#clock"/></svg></div><div class="val"><span class="v" id="kDwell">0</span><small>分鐘</small></div><div class="foot"><span class="delta" id="kDwellD"></span><span class="cmp" id="kDwellC"></span></div><div class="spark-wrap"><svg viewBox="0 0 200 40" preserveAspectRatio="none" id="sDwell"></svg></div></section>
+          <section class="card kpi" data-k="acc"><div class="row"><span class="label">估計準確度</span><svg class="i"><use href="#target"/></svg></div><div class="val"><span class="v" id="kAcc">0</span><small>%</small></div><div class="foot"><span class="delta" id="kAccD"></span><span class="cmp" id="kAccC"></span></div><div class="spark-wrap"><svg viewBox="0 0 200 40" preserveAspectRatio="none" id="sAcc"></svg></div></section>
+          <section class="card todo" aria-label="需要處理">
+            <div class="card-h"><h3>需要處理 <span class="mono" id="todoN" style="color:var(--ink-4);font-weight:400"></span></h3><a class="link" href="#events">全部事件<svg class="i ar" viewBox="0 0 16 16"><path class="sh" d="M3 8h9.5"/><path class="hd" d="M8.5 4l4 4-4 4"/></svg></a></div>
+            <ul class="list" id="todo"></ul>
+          </section>
+          <section class="card dev" aria-label="裝置健康">
+            <div class="card-h"><h3>裝置健康</h3><span class="chip ok" id="devChip"><i></i>5 / 5 在線</span></div>
+            <div class="devgrid" id="devs"></div>
+            <div class="uptime" id="uptime" aria-label="今天各時段的連線狀態"></div>
+            <div class="uptime-l"><span>10:00</span><span>營業時間 · 每格 15 分鐘</span><span>22:00</span></div>
+          </section>
+        </div>
+      </section>
+
+      <!-- ============ 即時店況 ============ -->
+      <section class="page" id="p-live" data-title="即時店況" aria-label="即時店況">
+        <div class="ph"><div><span class="label">LIVE · 數位分身</span><h1>即時店況</h1><p id="liveSub">拖曳旋轉、滾輪縮放，點選區域看細節。</p></div>
+          <div class="row"><div class="seg" role="group" aria-label="視角" id="camSeg"><span class="thumb"></span><button data-cam="iso" aria-pressed="true">斜角</button><button data-cam="top" aria-pressed="false">俯視</button><button data-cam="door" aria-pressed="false">入口</button></div>
+            <div class="pop"><button class="btn sec" id="layerBtn" aria-haspopup="true" aria-expanded="false"><svg class="i" style="width:16px"><use href="#layers"/></svg>圖層</button><div class="menu right" id="layerMenu" hidden role="menu"></div></div></div></div>
+        <div class="livegrid">
+          <div class="stagecol">
+            <div class="card stagecard">
+              <div class="stage" id="stage"><div class="zlabels" id="zlabels"></div>
+                <div class="twinload" id="twinLoad"><span class="mx lg" data-v="orbit"></span><b>正在搭建店面模型</b><small>第一次載入 three.js 需要幾秒</small></div>
+                <div class="replaybar" id="replayBar" hidden><span class="mx" data-v="twinkle"></span><span id="replayTxt">回放中</span><button class="btn sm" id="replayExit">回到即時</button></div>
+              </div>
+            </div>
+            <div class="card tlcard"><div class="card-h"><h3>今天的時間軸</h3><span class="tl-legend"><span><i style="background:var(--accent)"></i>場內人數</span><span><i style="background:var(--warn)"></i>門外排隊</span><span><i class="dash"></i>人數上限</span></span><button class="btn ghost sm" id="tlLive" aria-pressed="true">即時</button></div>
+              <div class="tl" id="tl" tabindex="0" role="slider" aria-label="時間軸：拖曳回放今天任一時刻" aria-valuemin="0" aria-valuemax="720"></div>
+              <p class="note" style="margin-top:8px">拖曳或用 ← → 回放任一分鐘，3D 店面、入口面板與分區數字會一起回到那個時間。</p></div>
+          </div>
+          <aside class="sidecol">
+            <div class="card entry">
+              <div class="card-h"><h3>入口面板</h3><span class="chip" id="gateChip"><i></i>閘門開啟</span></div>
+              <div class="tm1637"><div class="seg7" id="seg7" aria-label="TM1637 顯示場內人數"></div><div class="tmcap"><span class="label">TM1637</span><b id="tmCap">/ 40</b></div></div>
+              <div class="leds" id="leds" aria-hidden="true"></div>
+              <div class="entry-facts"><div><span class="label">門外排隊</span><b id="eQueue">0 人</b></div><div><span class="label">溫度 · 濕度</span><b id="eEnv">--</b></div></div>
+              <div class="seg full" role="group" aria-label="閘門模式" id="gateSeg"><span class="thumb"></span><button data-gate="auto" aria-pressed="true">自動限流</button><button data-gate="open" aria-pressed="false">常開</button><button data-gate="closed" aria-pressed="false">暫停入場</button></div>
+              <button class="hold" id="hold"><span class="t2">按住 1.5 秒緊急關閉閘門</span><span class="t3" aria-hidden="true"></span></button>
+            </div>
+            <div class="card zones"><div class="card-h"><h3>四個分區</h3><span class="label" id="thrLbl">門檻 14 人</span></div><div class="zl" id="zoneList"></div></div>
+            <div class="card zdetail" id="zdetail" hidden></div>
+            <div class="card receipt"><div class="card-h"><h3>感測紀錄</h3><span class="label" id="rcCount">#0000</span></div><div class="paper"><div class="rc-head">STOREGA · 信義旗艦店<br><span id="rcDate"></span></div><ol class="rc" id="rc"></ol></div></div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ============ 分析 ============ -->
+      <section class="page" id="p-analytics" data-title="分析" aria-label="分析">
+        <div class="ph"><div><span class="label">ANALYTICS · 開店至今</span><h1>分析</h1><p>人流、轉換、分區與 Wi-Fi 估計準確度。滑過圖表看每個時段的數字。</p></div>
+          <button class="btn sec" data-export="CSV"><svg class="i" style="width:16px"><use href="#download"/></svg>匯出 CSV</button></div>
+        <div class="stats4" id="aStats"></div>
+        <div class="tabs" role="tablist" id="aTabs"><button role="tab" aria-selected="true" data-t="flow">人流</button><button role="tab" aria-selected="false" data-t="conv">轉換</button><button role="tab" aria-selected="false" data-t="zone">分區</button><button role="tab" aria-selected="false" data-t="acc">Wi-Fi 準確度</button><span class="ul"></span></div>
+        <div class="apanel" data-t="flow">
+          <div class="card"><div class="card-h"><h3>每小時進場與結帳</h3><span class="lgd"><span><i style="background:var(--ink)"></i>進場</span><span><i style="background:var(--accent)"></i>結帳</span></span></div><div class="chart" id="chHour" aria-label="每小時進場與結帳人數"></div></div>
+          <div class="card"><div class="card-h"><h3>近 7 天</h3><span class="lgd"><span><i style="background:var(--ink)"></i>進場</span><span><i style="background:var(--accent)"></i>結帳</span><span>下方為轉換率</span></span></div><div class="chart" id="chWeek" aria-label="近七天進場與結帳"></div></div>
+        </div>
+        <div class="apanel" data-t="conv" hidden>
+          <div class="card"><div class="card-h"><h3>從進門到結帳</h3><span class="label">每一步留下多少人</span></div><div class="funnel" id="funnel"></div></div>
+          <div class="card"><div class="card-h"><h3>每小時轉換率</h3><span class="label">結帳 ÷ 進場</span></div><div class="chart" id="chConv" aria-label="每小時轉換率"></div></div>
+        </div>
+        <div class="apanel two" data-t="zone" hidden>
+          <div class="card span2"><div class="card-h"><h3>分區 × 時段熱度</h3><span class="label">每格為該小時平均人數</span></div><div class="matrix" id="matrix"></div></div>
+          <div class="card"><div class="card-h"><h3>各區人數占比</h3><div class="seg" role="group" aria-label="時段" id="dnSeg"><span class="thumb"></span><button aria-pressed="true" data-k="now">此刻</button><button aria-pressed="false" data-k="avg">今天平均</button></div></div><div class="donut"><svg viewBox="0 0 150 150" id="dn" aria-label="各區占比"><circle cx="75" cy="75" r="58" fill="none" stroke="var(--sunken)" stroke-width="16"/></svg><div class="lg" id="dnl"></div></div></div>
+          <div class="card"><div class="card-h"><h3>平均停留時間</h3><span class="label">分鐘</span></div><div class="hbars" id="dwell"></div></div>
+        </div>
+        <div class="apanel" data-t="acc" hidden>
+          <div class="card"><div class="card-h"><h3>校正前後的準確度</h3><span class="lgd"><span><i style="background:var(--zB)"></i>Wi-Fi 原始</span><span><i style="background:var(--accent)"></i>校正後</span></span></div><div class="accstats" id="accStats"></div><div class="chart" id="chAcc" aria-label="每小時 Wi-Fi 估計準確度"></div></div>
+          <div class="card explain"><div class="card-h"><h3>為什麼要校正？</h3></div>
+            <ol class="steps2"><li><b>Wi-Fi 會多算</b><p>一個人可能帶手機、手錶、平板；路過門口的人也會被收到。</p></li><li><b>入口紅外線是標準答案</b><p>兩組紅外線判斷方向，能精確算出場內人數，但不知道人在哪一區。</p></li><li><b>用 k 把兩者對齊</b><p>k = 入口人數 ÷ Wi-Fi 裝置總數，每分鐘自動更新；雷達判斷無人時該區直接歸零。</p></li></ol></div>
+        </div>
+      </section>
+
+      <!-- ============ 事件 ============ -->
+      <section class="page" id="p-events" data-title="事件" aria-label="事件">
+        <div class="ph"><div><span class="label">EVENTS · 今天</span><h1>事件</h1><p>人數上限、分區擁擠、節點離線與系統操作，全部記錄在這裡。</p></div>
+          <button class="btn pri" id="evAckAll"><svg class="i" style="width:16px"><use href="#check"/></svg>全部標為已處理</button></div>
+        <div class="filterbar">
+          <div class="seg" role="group" aria-label="等級" id="evSeg"><span class="thumb"></span><button aria-pressed="true" data-lv="all">全部 <span class="n" id="evN-all"></span></button><button aria-pressed="false" data-lv="crit">嚴重 <span class="n" id="evN-crit"></span></button><button aria-pressed="false" data-lv="warn">警告 <span class="n" id="evN-warn"></span></button><button aria-pressed="false" data-lv="info">紀錄 <span class="n" id="evN-info"></span></button></div>
+          <label class="switch"><input type="checkbox" id="evUnack"><span class="tr"></span>只看未處理</label>
+          <div class="inp search"><span class="pre"><svg class="i" style="width:16px"><use href="#search"/></svg></span><input id="evQ" placeholder="搜尋事件…" aria-label="搜尋事件"></div>
+        </div>
+        <div class="card evcard"><div class="evlist" id="evList"></div></div>
+      </section>
+
+      <!-- ============ 裝置 ============ -->
+      <section class="page" id="p-devices" data-title="裝置" aria-label="裝置">
+        <div class="ph"><div><span class="label">DEVICES · ESP32 × 5</span><h1>裝置</h1><p>入口節點負責計數與閘門，四顆分區節點監聽 Wi-Fi 與毫米波雷達。</p></div>
+          <button class="btn sec" id="blinkAll"><svg class="i" style="width:16px"><use href="#zap"/></svg>全部閃燈</button></div>
+        <div class="stats4" id="dStats"></div>
+        <div class="filterbar"><div class="seg" role="group" aria-label="篩選" id="dSeg"><span class="thumb"></span><button aria-pressed="true" data-f="all">全部</button><button aria-pressed="false" data-f="on">在線</button><button aria-pressed="false" data-f="off">離線</button></div>
+          <div class="inp search"><span class="pre"><svg class="i" style="width:16px"><use href="#search"/></svg></span><input id="dQ" placeholder="搜尋名稱、IP、零件…" aria-label="搜尋裝置"></div></div>
+        <div class="devlayout">
+          <div class="card tblcard"><table class="tbl" id="dTbl"><thead><tr><th>節點</th><th>狀態</th><th>訊號</th><th>近 30 分鐘</th><th>IP</th><th>運行</th><th>最後回報</th></tr></thead><tbody id="dBody"></tbody></table><div class="emptyrow" id="dEmpty" hidden>沒有符合的裝置</div></div>
+          <aside class="card drawer" id="drawer" aria-label="裝置細節"></aside>
+        </div>
+      </section>
+
+      <!-- ============ 設定 ============ -->
+      <section class="page" id="p-settings" data-title="設定" aria-label="設定">
+        <div class="ph"><div><span class="label">SETTINGS</span><h1>設定</h1><p>改動會即時送到入口節點（Node-RED 模式下透過 MQTT）。</p></div></div>
+        <div class="setlayout">
+          <nav class="subnav" aria-label="設定分類" id="subnav">
+            <a href="#settings/rules" data-s="rules"><svg class="i"><use href="#shield"/></svg>限流規則</a>
+            <a href="#settings/calib" data-s="calib"><svg class="i"><use href="#wifi"/></svg>Wi-Fi 校正</a>
+            <a href="#settings/source" data-s="source"><svg class="i"><use href="#plug"/></svg>資料來源</a>
+            <a href="#settings/alerts" data-s="alerts"><svg class="i"><use href="#bell"/></svg>通知</a>
+            <a href="#settings/look" data-s="look"><svg class="i"><use href="#sun"/></svg>外觀</a>
+            <a href="#settings/data" data-s="data"><svg class="i"><use href="#download"/></svg>資料</a>
+          </nav>
+          <div class="setpanels">
+            <form class="card spanel" data-s="rules" id="rulesForm" novalidate>
+              <div class="sh2"><h2>限流規則</h2><p>場內人數到上限時閘門自動關閉，新顧客在門外排隊；分區超過門檻會提醒你派人。</p></div>
+              <div class="fgrid">
+                <div class="f"><label for="fCap">場內人數上限 <small>10 – 80 人</small></label><div class="stepper"><button type="button" data-step="-1" aria-label="減少"><svg class="i"><use href="#minus"/></svg></button><output id="fCap" aria-live="polite">40</output><button type="button" data-step="1" aria-label="增加"><svg class="i"><use href="#plus"/></svg></button></div><span class="help">達到 <b id="fCap80">32</b> 人（80%）時先提醒。</span></div>
+                <div class="f"><label for="fThr">分區擁擠門檻 <small id="fThrV">14 人</small></label><div class="slider"><input type="range" id="fThr" min="4" max="30" value="14" style="--p:38%"><div class="marks"><span>4</span><span>17</span><span>30</span></div></div><span class="help">任一區校正後人數超過時發出警告。</span></div>
+                <div class="f full"><label>閘門模式</label><div class="seg" role="group" aria-label="閘門模式" id="fGate"><span class="thumb"></span><button type="button" data-g="auto" aria-pressed="true">自動限流</button><button type="button" data-g="open" aria-pressed="false">常開</button><button type="button" data-g="closed" aria-pressed="false">暫停入場</button></div><span class="help" id="fGateH">達上限時 SG90 轉到 0°，燈條轉紅。</span></div>
+                <div class="f full"><label class="switch"><input type="checkbox" id="fWhite"><span class="tr"></span>排除員工裝置（白名單）</label><span class="help">店員的手機 MAC 經 SHA-256 雜湊後列入白名單，不計入顧客。</span></div>
+              </div>
+              <div class="ffoot"><span class="saved clean" id="rulesSaved"><i></i><span>所有變更都已儲存</span></span><div class="row"><button type="button" class="btn ghost" id="rulesReset">復原</button><button class="btn pri" id="rulesSave">儲存規則</button></div></div>
+            </form>
+            <div class="card spanel calib" data-s="calib" id="calib" hidden>
+              <div class="sh2"><h2>Wi-Fi 校正</h2><p>用入口紅外線的人數當標準答案，修正 Wi-Fi 監聽多算的部分。</p></div>
+              <div class="kres"><b id="kv">0.62</b><span id="kn">目前的 k</span></div>
+              <ul class="steps" id="steps"><li><span class="sd"></span><span>讀取入口紅外線人數</span><span class="v"></span></li><li><span class="sd"></span><span>統計各區 Wi-Fi 裝置數</span><span class="v"></span></li><li><span class="sd"></span><span>計算校正係數 k</span><span class="v"></span></li><li><span class="sd"></span><span>同步到分區節點</span><span class="v"></span></li></ul>
+              <div class="row" style="margin-top:18px"><button class="btn acc" id="calBtn"><span class="mph" id="calLbl">立即校正</span></button><label class="switch"><input type="checkbox" id="fKauto"><span class="tr"></span>每分鐘自動微調</label></div>
+            </div>
+            <div class="card spanel" data-s="source" hidden>
+              <div class="sh2"><h2>資料來源</h2><p>沒有硬體時用模擬器展示；接上 Node-RED（Aedes broker 開啟 WebSocket）就會切到真實資料。</p></div>
+              <div class="seg" role="group" aria-label="資料來源" id="srcSeg"><span class="thumb"></span><button data-src="sim" aria-pressed="true">模擬器</button><button data-src="mqtt" aria-pressed="false">Node-RED（MQTT）</button></div>
+              <div class="f" style="margin-top:20px"><label for="mqUrl">Broker WebSocket 位址</label><div class="inp" id="mqBox"><span class="pre"><svg class="i" style="width:16px"><use href="#plug"/></svg></span><input id="mqUrl" value="ws://192.168.50.10:8080" spellcheck="false" aria-describedby="mqHelp"></div><span class="help" id="mqHelp">需要以 ws:// 或 wss:// 開頭。</span></div>
+              <div class="row" style="margin-top:14px"><button class="btn pri" id="mqGo"><span class="mph" id="mqLbl">連線</span></button><span class="think" id="mqState"></span></div>
+              <div class="topics"><span class="label">訂閱的主題</span>
+                <div class="topic"><code>sga/+/counter</code><span>入口：進出人數、結帳、閘門、溫濕度</span><button class="btn ghost sm" data-copy="sga/+/counter"><span class="mph">複製</span></button></div>
+                <div class="topic"><code>sga/+/wifi</code><span>分區：Wi-Fi 原始裝置數</span><button class="btn ghost sm" data-copy="sga/+/wifi"><span class="mph">複製</span></button></div>
+                <div class="topic"><code>sga/+/radar</code><span>分區：LD2410 有人／移動</span><button class="btn ghost sm" data-copy="sga/+/radar"><span class="mph">複製</span></button></div>
+                <div class="topic"><code>sga/+/status</code><span>心跳：訊號、IP、韌體、運行時間</span><button class="btn ghost sm" data-copy="sga/+/status"><span class="mph">複製</span></button></div>
+                <div class="topic"><code>sga/{node}/cmd</code><span>下行指令：閘門、上限、校正、閃燈、重開</span><button class="btn ghost sm" data-copy="sga/entry-01/cmd"><span class="mph">複製</span></button></div>
+              </div>
+            </div>
+            <div class="card spanel" data-s="alerts" hidden>
+              <div class="sh2"><h2>通知</h2><p>決定哪些事件要跳出提示。所有事件都還是會記錄在「事件」頁。</p></div>
+              <div class="swlist">
+                <label class="switch"><input type="checkbox" data-nt="crit" checked><span class="tr"></span><span><b>嚴重</b><small>已達人數上限、節點離線</small></span></label>
+                <label class="switch"><input type="checkbox" data-nt="warn" checked><span class="tr"></span><span><b>警告</b><small>接近上限、分區擁擠、溫度偏高</small></span></label>
+                <label class="switch"><input type="checkbox" data-nt="info"><span class="tr"></span><span><b>紀錄</b><small>校正、重開機、設定變更</small></span></label>
+              </div>
+            </div>
+            <div class="card spanel" data-s="look" hidden>
+              <div class="sh2"><h2>外觀</h2><p>夜間模式適合打烊後或櫃台光線較暗時使用。</p></div>
+              <div class="seg" role="group" aria-label="主題" id="themeSeg"><span class="thumb"></span><button data-t="light" aria-pressed="false">日間</button><button data-t="auto" aria-pressed="true">跟隨系統</button><button data-t="dark" aria-pressed="false">夜間</button></div>
+              <div class="swlist" style="margin-top:20px"><label class="switch"><input type="checkbox" id="fMini"><span class="tr"></span><span><b>側欄只顯示圖示</b><small>畫面較小時有更多空間給圖表</small></span></label></div>
+            </div>
+            <div class="card spanel" data-s="data" hidden>
+              <div class="sh2"><h2>資料</h2><p>今日資料存在瀏覽器記憶體中；正式部署時由 Node-RED 寫入資料庫。</p></div>
+              <div class="row"><button class="btn sec" data-export="CSV"><svg class="i" style="width:16px"><use href="#download"/></svg>匯出 CSV</button><button class="btn sec" data-export="JSON"><svg class="i" style="width:16px"><use href="#download"/></svg>匯出 JSON</button></div>
+              <div class="danger"><div><b>清除今日資料</b><p>重新從 10:00 開店開始模擬，設定會保留。</p></div><button class="btn dan" id="resetBtn">清除今日資料…</button></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="scrim" id="delScrim" hidden><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="delT"><span class="di"><svg class="i"><use href="#warn"/></svg></span><h3 id="delT">清除今日資料？</h3><p>今天的進場紀錄、結帳與事件都會刪除。請輸入門市名稱「<b style="color:var(--ink)">信義旗艦店</b>」確認。</p>
+  <div class="f"><div class="inp"><input id="delIn" placeholder="信義旗艦店" autocomplete="off" aria-label="輸入門市名稱"></div></div>
+  <div class="acts2"><button class="btn ghost" id="delCancel">取消</button><button class="btn dan" id="delGo" disabled>清除今日資料</button></div></div></div>
+<div class="sr-only" id="announce" aria-live="assertive"></div>
+
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.163.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.163.0/examples/jsm/"}}</script>
+<script src="assets/js/util.js"></script>
+<script src="assets/js/model.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/overview.js"></script>
+<script src="assets/js/live.js"></script>
+<script src="assets/js/analytics.js"></script>
+<script src="assets/js/events.js"></script>
+<script src="assets/js/devices.js"></script>
+<script src="assets/js/settings.js"></script>
+<script src="assets/js/twin.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
