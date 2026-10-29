@@ -217,7 +217,7 @@
           <div class="row"><button class="btn ghost" id="printBtn"><svg class="i" style="width:16px"><use href="#chart"/></svg>列印報表</button><button class="btn sec" data-export="CSV"><svg class="i" style="width:16px"><use href="#download"/></svg>匯出 CSV</button></div></div>
         <div class="printhead"><b>StoreGA 每日報表 · <span id="printStore">我的門市</span></b><span id="printDate"></span></div>
         <div class="stats4" id="aStats"></div>
-        <div class="tabs" role="tablist" id="aTabs"><button role="tab" aria-selected="true" data-t="flow">人流</button><button role="tab" aria-selected="false" data-t="conv">轉換</button><button role="tab" aria-selected="false" data-t="zone">分區</button><button role="tab" aria-selected="false" data-t="acc">Wi-Fi 準確度</button><span class="ul"></span></div>
+        <div class="tabs" role="tablist" id="aTabs"><button role="tab" aria-selected="true" data-t="flow">人流</button><button role="tab" aria-selected="false" data-t="conv">轉換</button><button role="tab" aria-selected="false" data-t="zone">分區</button><button role="tab" aria-selected="false" data-t="acc">Wi-Fi 準確度</button><button role="tab" aria-selected="false" data-t="val">現場驗證</button><span class="ul"></span></div>
         <div class="apanel" data-t="flow">
           <div class="card"><div class="card-h"><h3>每小時進場與結帳</h3><span class="lgd"><span><i style="background:var(--ink)"></i>進場</span><span><i style="background:var(--accent)"></i>結帳</span><span id="ghostLgd"><i class="ghost"></i>預測進場</span></span></div><div class="chart" id="chHour" aria-label="每小時進場與結帳人數"></div></div>
           <div class="card"><div class="card-h"><h3>近 7 天</h3><span class="lgd"><span><i style="background:var(--ink)"></i>進場</span><span><i style="background:var(--accent)"></i>結帳</span><span>下方為轉換率</span></span></div><div class="chart" id="chWeek" aria-label="近七天進場與結帳"></div></div>
@@ -235,6 +235,19 @@
           <div class="card"><div class="card-h"><h3>校正前後的準確度</h3><span class="lgd"><span><i style="background:var(--zB)"></i>Wi-Fi 原始</span><span><i style="background:var(--accent)"></i>校正後</span></span></div><div class="accstats" id="accStats"></div><div class="chart" id="chAcc" aria-label="每小時 Wi-Fi 估計準確度"></div></div>
           <div class="card explain"><div class="card-h"><h3>為什麼要校正？</h3></div>
             <ol class="steps2"><li><b>Wi-Fi 會多算</b><p>一個人可能帶手機、手錶、平板；路過門口的人也會被收到。</p></li><li><b>入口紅外線是標準答案</b><p>兩組紅外線判斷方向，能精確算出場內人數，但不知道人在哪一區。</p></li><li><b>用 k 把兩者對齊</b><p>k = 入口人數 ÷ Wi-Fi 裝置總數，每分鐘自動更新；雷達判斷無人時該區直接歸零。</p></li></ol></div>
+        </div>
+        <div class="apanel" data-t="val" hidden>
+          <div class="card valcard"><div class="card-h"><div><h3>人工計數對照</h3><p class="sub2">站在門口，每看到一個人進門按「進」、出門按「出」。結束時和紅外線同一段時間的計數比對，這就是紅外線的準確度。</p></div><span class="chip n" id="valState"><i></i>還沒開始</span></div>
+            <div class="valgrid">
+              <button class="valbtn in" id="valIn" disabled><b>進</b><span id="valInN">0</span><small>鍵盤 I</small></button>
+              <button class="valbtn out" id="valOut" disabled><b>出</b><span id="valOutN">0</span><small>鍵盤 O</small></button>
+              <div class="valcmp" id="valCmp"></div>
+            </div>
+            <div class="row" style="margin-top:16px"><button class="btn pri" id="valGo">開始計數</button><button class="btn ghost" id="valUndo" disabled>復原上一下</button><span class="note" id="valNote" style="margin:0 0 0 auto"></span></div></div>
+          <div class="card"><div class="card-h"><div><h3>分區抽查</h3><p class="sub2">走進一個區，數一數現在有幾個人，和 Wi-Fi × k 的估計比對。</p></div></div>
+            <div class="row spot"><div class="seg" role="group" aria-label="分區" id="spotSeg"><span class="thumb"></span><button aria-pressed="true" data-z="A">A</button><button aria-pressed="false" data-z="B">B</button><button aria-pressed="false" data-z="C">C</button><button aria-pressed="false" data-z="D">D</button></div>
+              <div class="inp" style="width:110px"><input id="spotN" type="number" min="0" max="99" inputmode="numeric" aria-label="現場數到的人數" placeholder="人數"></div><button class="btn sec" id="spotGo">記錄</button><span class="note" id="spotNow" style="margin:0"></span></div></div>
+          <div class="card"><div class="card-h"><h3>驗證紀錄</h3><div class="row"><span class="label" id="valSum"></span><button class="btn ghost sm" id="valCsv">匯出 CSV</button></div></div><div class="vallist" id="valList"></div></div>
         </div>
       </section>
 
@@ -261,7 +274,7 @@
         <div class="filterbar"><div class="seg" role="group" aria-label="篩選" id="dSeg"><span class="thumb"></span><button aria-pressed="true" data-f="all">全部</button><button aria-pressed="false" data-f="on">在線</button><button aria-pressed="false" data-f="off">離線</button></div>
           <div class="inp search"><span class="pre"><svg class="i" style="width:16px"><use href="#search"/></svg></span><input id="dQ" placeholder="搜尋名稱、IP、零件…" aria-label="搜尋裝置"></div></div>
         <div class="devlayout">
-          <div class="card tblcard"><table class="tbl" id="dTbl"><thead><tr><th>節點</th><th>狀態</th><th>訊號</th><th>近 30 分鐘</th><th>IP</th><th>運行</th><th>最後回報</th></tr></thead><tbody id="dBody"></tbody></table><div class="emptyrow" id="dEmpty" hidden>沒有符合的裝置</div></div>
+          <div class="card tblcard"><table class="tbl" id="dTbl"><thead><tr><th>節點</th><th>狀態</th><th>訊號</th><th>近 30 分鐘</th><th>延遲</th><th>遺失</th><th>IP</th><th>最後回報</th></tr></thead><tbody id="dBody"></tbody></table><div class="emptyrow" id="dEmpty" hidden>沒有符合的裝置</div></div>
           <aside class="card drawer" id="drawer" aria-label="裝置細節"></aside>
         </div>
         <section class="card console" aria-label="MQTT 訊息">
@@ -322,6 +335,8 @@
                 <div class="f full"><label>閘門模式</label><div class="seg" role="group" aria-label="閘門模式" id="fGate"><span class="thumb"></span><button type="button" data-g="auto" aria-pressed="true">自動限流</button><button type="button" data-g="open" aria-pressed="false">常開</button><button type="button" data-g="closed" aria-pressed="false">暫停入場</button></div><span class="help" id="fGateH">達上限時 SG90 轉到 0°，燈條轉紅。</span></div>
                 <div class="f full"><label class="switch"><input type="checkbox" id="fWhite"><span class="tr"></span>排除員工裝置（白名單）</label><span class="help">店員的手機 MAC 經 SHA-256 雜湊後列入白名單，不計入顧客。</span></div>
               </div>
+              <div class="occfix"><div><b>校正場內人數</b><p>紅外線偶爾會漏算（兩人並肩、在門口來回）。打烊或盤點時輸入現場實際人數，入口節點會調整今天的離場數；打烊 30 分鐘後也會自動歸零。</p></div>
+                <div class="row"><div class="inp" style="width:110px"><input id="occFix" type="number" min="0" max="200" inputmode="numeric" aria-label="現場實際人數"></div><button type="button" class="btn sec" id="occFixGo">送出校正</button></div></div>
               <div class="ffoot"><span class="saved clean" id="rulesSaved"><i></i><span>所有變更都已儲存</span></span><div class="row"><button type="button" class="btn ghost" id="rulesReset">復原</button><button class="btn pri" id="rulesSave">儲存規則</button></div></div>
             </form>
             <div class="card spanel calib" data-s="calib" id="calib" hidden>
@@ -334,13 +349,18 @@
               <div class="sh2"><h2>資料來源</h2><p><b>真實模式</b>只顯示 ESP32 經 Node-RED 送來的資料，今天的數字、過去每天的摘要與日誌會存在這台電腦的瀏覽器；<b>展示模式</b>用模擬器產生資料，不會保存。</p></div>
               <div class="seg" role="group" aria-label="模式" id="srcSeg"><span class="thumb"></span><button data-src="mqtt" aria-pressed="false">真實模式</button><button data-src="sim" aria-pressed="true">展示模式</button></div>
               <div class="f" style="margin-top:20px"><label for="mqUrl">Broker WebSocket 位址</label><div class="inp" id="mqBox"><span class="pre"><svg class="i" style="width:16px"><use href="#plug"/></svg></span><input id="mqUrl" value="ws://192.168.50.10:8080" spellcheck="false" aria-describedby="mqHelp"></div><span class="help" id="mqHelp">Node-RED 電腦的 IP，Aedes 的 WebSocket 埠（預設 8080）。</span></div>
+              <div class="fgrid" style="margin-top:14px"><div class="f"><label for="mqUser">帳號 <small>broker 有設帳號密碼時填</small></label><div class="inp"><input id="mqUser" spellcheck="false" autocomplete="username" placeholder="例如 dashboard"></div></div>
+                <div class="f"><label for="mqPass">密碼 <small>只存在這台電腦</small></label><div class="inp"><input id="mqPass" type="password" autocomplete="current-password"></div></div></div>
               <div class="row" style="margin-top:14px"><button class="btn pri" id="mqGo"><span class="mph" id="mqLbl">連線並使用真實模式</span></button><button class="btn ghost" id="mqStop" hidden>中斷連線</button><span class="think" id="mqState"></span></div>
+              <dl class="kvs" id="srcKv" style="margin-top:18px"></dl>
               <div class="topics"><span class="label">訂閱的主題</span>
                 <div class="topic"><code>sga/+/counter</code><span>入口：進出人數、結帳、閘門、溫濕度</span><button class="btn ghost sm" data-copy="sga/+/counter"><span class="mph">複製</span></button></div>
                 <div class="topic"><code>sga/+/wifi</code><span>分區：Wi-Fi 原始裝置數</span><button class="btn ghost sm" data-copy="sga/+/wifi"><span class="mph">複製</span></button></div>
                 <div class="topic"><code>sga/+/radar</code><span>分區：LD2410 有人／移動</span><button class="btn ghost sm" data-copy="sga/+/radar"><span class="mph">複製</span></button></div>
                 <div class="topic"><code>sga/+/status</code><span>心跳：訊號、IP、韌體、運行時間</span><button class="btn ghost sm" data-copy="sga/+/status"><span class="mph">複製</span></button></div>
-                <div class="topic"><code>sga/{node}/cmd</code><span>下行指令：閘門、上限、校正、閃燈、重開</span><button class="btn ghost sm" data-copy="sga/entry-01/cmd"><span class="mph">複製</span></button></div>
+                <div class="topic"><code>sga/+/ack</code><span>板子對指令的回覆：已執行或拒絕（含原因）</span><button class="btn ghost sm" data-copy="sga/+/ack"><span class="mph">複製</span></button></div>
+                <div class="topic"><code>sga/system/#</code><span>Node-RED：整店狀態、告警、上線狀態、歷史</span><button class="btn ghost sm" data-copy="sga/system/#"><span class="mph">複製</span></button></div>
+                <div class="topic"><code>sga/{node}/cmd</code><span>下行指令：閘門、上限、人數校正、閃燈、重開</span><button class="btn ghost sm" data-copy="sga/entry-01/cmd"><span class="mph">複製</span></button></div>
               </div>
             </div>
             <div class="card spanel" data-s="alerts" hidden>
@@ -359,6 +379,9 @@
                 <div class="f"><label for="fwHost">Node-RED 電腦 IP</label><div class="inp" id="fwHostBox"><input id="fwHost" placeholder="192.168.50.10" spellcheck="false"></div><span class="help" id="fwHostH">ESP32 會連到這台電腦的 1883 埠。</span></div>
                 <div class="f"><label for="fwSsid">Wi-Fi 名稱</label><div class="inp"><input id="fwSsid" placeholder="店裡的 Wi-Fi" spellcheck="false"></div></div>
                 <div class="f"><label for="fwPass">Wi-Fi 密碼 <small>只會出現在產生的檔案裡</small></label><div class="inp"><input id="fwPass" type="password" autocomplete="off"><button class="btn ghost sm icon" id="fwEye" type="button" aria-label="顯示密碼" style="margin-right:4px"><svg class="i" style="width:15px"><use href="#target"/></svg></button></div></div>
+                <div class="f"><label for="fwMqUser">MQTT 帳號 <small>broker 沒設就留空</small></label><div class="inp"><input id="fwMqUser" spellcheck="false" placeholder="device"></div></div>
+                <div class="f"><label for="fwMqPass">MQTT 密碼</label><div class="inp"><input id="fwMqPass" type="password" autocomplete="off"></div></div>
+                <div class="f"><label for="fwOta">無線更新（OTA）密碼 <small>留空就不開 OTA</small></label><div class="inp"><input id="fwOta" spellcheck="false" autocomplete="off"></div><span class="help">之後在 Arduino IDE 的「連接埠」選 storega-節點名稱，就能不接線更新。</span></div>
                 <div class="f zoneonly"><label for="fwSalt">雜湊用的鹽 <small>每間店不同</small></label><div class="inp"><input id="fwSalt" spellcheck="false"><button class="btn ghost sm" id="fwSaltNew" type="button" style="margin-right:4px">換一組</button></div><span class="help">四顆分區節點要用同一組，才不會把同一支手機算成不同裝置。</span></div>
                 <div class="f zoneonly"><label for="fwRssi">訊號門檻 <small id="fwRssiV">−75 dBm</small></label><div class="slider"><input type="range" id="fwRssi" min="-90" max="-50" value="-75" style="--p:37.5%"><div class="marks"><span>−90 遠</span><span>−70</span><span>−50 近</span></div></div></div>
                 <div class="f full zoneonly"><label class="switch"><input type="checkbox" id="fwRadar" checked><span class="tr"></span>這一區有裝 LD2410 雷達</label></div>
@@ -398,6 +421,7 @@
   <div class="mgrid">
     <section class="mc"><span class="mi2 real"><svg class="i"><use href="#plug"/></svg></span><b>真實模式</b><p>連到 Node-RED，只顯示 ESP32 真的送來的資料。今天的數字、每天的摘要與日誌會存在這台電腦。</p>
       <div class="f"><label for="mcUrl">Broker WebSocket 位址</label><div class="inp" id="mcBox"><input id="mcUrl" spellcheck="false" autocomplete="off"></div><span class="help" id="mcHelp">Node-RED 電腦的 IP，Aedes 的 WebSocket 埠（預設 8080）</span></div>
+      <div class="mcred"><div class="f"><label for="mcUser">帳號 <small>broker 有設才填</small></label><div class="inp"><input id="mcUser" spellcheck="false" autocomplete="username"></div></div><div class="f"><label for="mcPass">密碼</label><div class="inp"><input id="mcPass" type="password" autocomplete="current-password"></div></div></div>
       <button class="btn pri" id="mcGo">連線並使用真實模式</button></section>
     <section class="mc"><span class="mi2"><svg class="i"><use href="#play"/></svg></span><b>展示模式</b><p>沒有硬體也能操作每一頁。資料由模擬器依時段產生，畫面會標示「展示模式」，也不會保存。</p>
       <button class="btn sec" id="mcDemo">先看展示模式</button></section>

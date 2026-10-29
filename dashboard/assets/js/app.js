@@ -28,7 +28,7 @@ function renderShell(){
   $('#simLbl').textContent=sn?`回放 ${hhmm(sn.t)}`:S.paused?'已暫停':live?(S.conn!=='ok'?`真實模式 · ${CONN[S.conn]}`:stale?`真實模式 · 延遲 ${Math.round(ago)} 秒`:'真實模式 · 即時'):`展示模式 · ${S.speed}×`;
   $('#clk').textContent=hhmmss(sn?sn.t:S.t);
   $('#srcTag').textContent=live?'LIVE':'DEMO';$('#srcName').textContent=live?'真實模式':'展示模式';
-  $('#srcDesc').textContent=live?`Node-RED ${CONN[S.conn]} · ${NODE_DEFS.filter(d=>S.nodes[d.id].online).length}/5 節點`:'模擬資料，不會保存';
+  $('#srcDesc').textContent=live?`${CONN[S.conn]} · ${NODE_DEFS.filter(d=>S.nodes[d.id].online).length}/5 節點 · 規則：${nrActive()?'Node-RED':'儀表板'}`:'模擬資料，不會保存';
   $('#railFoot').classList.toggle('real',live);$('#railFoot').classList.toggle('down',live&&S.conn!=='ok');
   $('#fresh').textContent=S.lastData<0?'還沒有資料':ago<2?'剛剛':ago<90?`${Math.round(ago)} 秒前`:`${Math.round(ago/60)} 分鐘前`;
   $('#spSrc').textContent=live?`真實模式 · Node-RED ${CONN[S.conn]}`:'展示模式（模擬資料）';setSeg($('#speedSeg'),x=>+x.dataset.speed===S.speed);
@@ -47,12 +47,18 @@ function renderBellList(){const L=S.alerts.filter(a=>!a.ack&&a.level!=='info').s
     :`<div class="nempty"><span class="ok">${icon('check',20)}</span><br>沒有未處理的告警</div>`;
   $('#bellCount').textContent=n?`共 ${n} 則未處理`:'';$('#ackAll').disabled=!n}
 function onAlert(a){if(a.level==='info')return;if(S.sound)chime(a.level);const b=$('#bellBtn');b.classList.remove('ringit');void b.offsetWidth;b.classList.add('ringit');if(!$('#bellPop').hidden)renderBellList()}
+/* what came back from the board: refused or silent commands need attention; applied ones just go in the log */
+onCmdResult=(c,m)=>{const n=CMDNAME[c.action]||c.action;
+  if(!m)toast('warn',`${c.node} 沒有回應「${n}」`,'6 秒內沒有收到板子的回覆，指令可能沒有送到。',{label:'查看裝置',fn:()=>goTarget({view:'devices',node:c.node})});
+  else if(!m.ok)toast('crit',`${c.node} 拒絕了「${n}」`,m.reason||'板子回覆無法執行。');
+  else if(c.action==='set_occupancy')toast('ok','入口節點已校正場內人數',`來回 ${c.ms} ms`);
+  if(view==='devices')renderDrawer()};
 /* after the whole state was replaced (mode switch, new day, cleared data): forget everything the pages cached */
 onLiveReset=()=>{replayIdx=null;receiptStart();OV.lastEntries=null;OV.todoKey=null;OV.sumKey=null;dots=[];window.twin?.reset();EV.key='';LG.key='';$('#aStats').innerHTML='';$('#dStats').innerHTML='';$('#matrix').dataset.k='';renderShell();renderPage()};
 /* one line under the top bar when the data itself needs explaining */
 function renderBanner(){const b=$('#sysBanner'),live=S.real,ago=(performance.now()-S.lastData)/1000,act=$('#sysAct'),url=esc(S.url||store.get('mqttUrl',''));let txt='',btn='',cls='';
   if(live&&S.conn==='connecting'&&!S.everConnected){txt=`<b>正在連線到 Node-RED</b>　${url} · 連上之前不會顯示任何數字。`;btn='資料來源'}
-  else if(live&&(S.conn==='down'||S.conn==='err')){txt=`<b>${S.conn==='err'?'連不上 Node-RED':'與 Node-RED 的連線中斷'}</b>　${url} · 每 3 秒自動重試${S.lastData>0?`，畫面停在 ${hhmmss(S.t-ago)} 的最後一筆`:''}。`;btn='資料來源';cls='crit'}
+  else if(live&&(S.conn==='down'||S.conn==='err')){txt=`<b>${S.conn==='err'?(S.connErr&&/帳號|密碼/.test(S.connErr)?S.connErr:'連不上 Node-RED'):'與 Node-RED 的連線中斷'}</b>　${url} · 每 3 秒自動重試${S.lastData>0?`，畫面停在 ${hhmmss(S.t-ago)} 的最後一筆`:''}。`;btn='資料來源';cls='crit'}
   else if(live&&S.conn==='idle'){txt='<b>真實模式還沒有連線</b>　到「設定 → 資料來源」輸入 Node-RED 的 WebSocket 位址。';btn='資料來源'}
   else if(live&&!NODE_DEFS.some(d=>S.nodes[d.id].seen)){txt='<b>已連上 Node-RED</b>　還沒收到任何 ESP32 的訊息（sga/…）。請確認板子已上電、連上同一個 Wi-Fi。';btn='查看裝置'}
   else if(live&&ago>15&&!S.paused){txt=`<b>資料延遲 ${Math.round(ago)} 秒</b>　broker 還連著，但沒有任何節點送出訊息，畫面停在 ${hhmmss(S.t-ago)} 的最後一筆。`;btn='查看裝置'}
@@ -74,15 +80,15 @@ function resetToday(){
   startDemo();onLiveReset();toast('ok','已清除今日資料','展示模式重新模擬到現在這個時間。')}
 
 /* ---------- modes: 真實模式 (Node-RED) or 展示模式 (simulator) ---------- */
-function useReal(url){closeChooser();if(!S.real){startReal();onLiveReset()}S.conn='connecting';store.set('mode','real');store.set('mqttUrl',url);slog('sys','info','切換到真實模式',url);mqttConnect(url);renderShell();renderSettings()}
+function useReal(url,user,pass){closeChooser();if(user!==undefined){store.set('mqttUser',user);store.set('mqttPass',pass||'')}if(!S.real){startReal();onLiveReset()}S.conn='connecting';store.set('mode','real');store.set('mqttUrl',url);slog('sys','info','切換到真實模式',url);mqttConnect(url);renderShell();renderSettings()}
 function useDemo(){closeChooser();if(S.real){slog('sys','info','切換到展示模式','真實模式的資料已保存，切回來會接續');setSource('sim')}else store.set('mode','demo');renderShell();renderSettings()}
 const suggestUrl=()=>store.get('mqttUrl','')||(location.protocol.startsWith('http')&&location.hostname?`ws://${location.hostname}:8080`:'ws://localhost:8080');
-function openChooser(){closePops();const sc=$('#modeScrim');$('#mcUrl').value=suggestUrl();sc.hidden=false;setTimeout(()=>$('#mcUrl').focus(),50)}
+function openChooser(){closePops();const sc=$('#modeScrim');$('#mcUrl').value=suggestUrl();$('#mcUser').value=store.get('mqttUser','');$('#mcPass').value=store.get('mqttPass','');sc.hidden=false;setTimeout(()=>$('#mcUrl').focus(),50)}
 function closeChooser(){$('#modeScrim').hidden=true}
 function bindChooser(){
   const ok=v=>/^wss?:\/\/[^\s/:]+(:\d{2,5})?\/?$/.test(v);
-  const go2=()=>{const v=$('#mcUrl').value.trim(),box=$('#mcBox');if(!ok(v)){box.classList.add('err');box.classList.remove('shake');void box.offsetWidth;box.classList.add('shake');$('#mcHelp').className='help err';$('#mcHelp').textContent='需要以 ws:// 開頭，例如 ws://192.168.50.10:8080';return}useReal(v)};
-  $('#mcGo').onclick=go2;$('#mcUrl').onkeydown=e=>{if(e.key==='Enter')go2()};$('#mcUrl').oninput=()=>{$('#mcBox').classList.remove('err');$('#mcHelp').className='help';$('#mcHelp').textContent='Node-RED 電腦的 IP，Aedes 的 WebSocket 埠（預設 8080）'};
+  const go2=()=>{const v=$('#mcUrl').value.trim(),box=$('#mcBox');if(!ok(v)){box.classList.add('err');box.classList.remove('shake');void box.offsetWidth;box.classList.add('shake');$('#mcHelp').className='help err';$('#mcHelp').textContent='需要以 ws:// 開頭，例如 ws://192.168.50.10:8080';return}useReal(v,$('#mcUser').value.trim(),$('#mcPass').value)};
+  $('#mcGo').onclick=go2;$('#mcPass').onkeydown=e=>{if(e.key==='Enter')go2()};$('#mcUrl').onkeydown=e=>{if(e.key==='Enter')go2()};$('#mcUrl').oninput=()=>{$('#mcBox').classList.remove('err');$('#mcHelp').className='help';$('#mcHelp').textContent='Node-RED 電腦的 IP，Aedes 的 WebSocket 埠（預設 8080）'};
   $('#mcDemo').onclick=useDemo;
 }
 

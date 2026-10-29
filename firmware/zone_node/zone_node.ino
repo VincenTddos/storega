@@ -17,11 +17,13 @@
 #include <ArduinoJson.h>
 #include "config.h"
 #include "storega_core.h"
+#include "storega_net.h"
 
 using namespace sga;
 
 WiFiClient net;
 PubSubClient mqtt(net);
+Link link(mqtt);
 DeviceSet<256> devices;
 const char* STAFF[] = STAFF_HASHES;
 #if HAS_RADAR
@@ -36,6 +38,7 @@ const char* T_WIFI   = "sga/" NODE_ID "/wifi";
 const char* T_RADAR  = "sga/" NODE_ID "/radar";
 const char* T_STATUS = "sga/" NODE_ID "/status";
 const char* T_CMD    = "sga/" NODE_ID "/cmd";
+const char* T_ACK    = "sga/" NODE_ID "/ack";
 
 /* ---------- promiscuous callback: runs in the Wi-Fi task, so it only copies into a ring buffer ---------- */
 struct Seen { uint8_t mac[6]; int8_t rssi; };
@@ -75,16 +78,16 @@ void startSniffing() {
 
 /* ---------- MQTT ---------- */
 void publishStatus() {
-  char j[200]; statusJson(j, sizeof j, WiFi.RSSI(), WiFi.localIP().toString().c_str(), FW_VERSION, millis() / 1000, ESP.getFreeHeap());
-  mqtt.publish(T_STATUS, j); lastStatus = millis();
+  char j[256]; statusJson(j, sizeof j, WiFi.RSSI(), WiFi.localIP().toString().c_str(), FW_VERSION, millis() / 1000, ESP.getFreeHeap(), resetReason());
+  link.publish(T_STATUS, j, sizeof j); lastStatus = millis();
 }
 void publishWifi(uint32_t now) {
-  char j[64]; snprintf(j, sizeof j, "{\"raw\":%u}", (unsigned)devices.count(now, WINDOW_MS));
-  mqtt.publish(T_WIFI, j); lastWifiPub = now;
+  char j[96]; snprintf(j, sizeof j, "{\"raw\":%u}", (unsigned)devices.count(now, WINDOW_MS));
+  link.publish(T_WIFI, j, sizeof j); lastWifiPub = now;
 }
 #if HAS_RADAR
 void publishRadar(uint32_t now) {
-  char j[120]; radarJson(j, sizeof j, radar); mqtt.publish(T_RADAR, j);
+  char j[160]; radarJson(j, sizeof j, radar); link.publish(T_RADAR, j, sizeof j);
   lastRadarPub = now; lastPresence = radar.presence; lastMoving = radar.moving;
 }
 #endif
@@ -92,13 +95,15 @@ void onMessage(char* topic, byte* payload, unsigned int len) {
   JsonDocument doc;
   if (deserializeJson(doc, payload, len)) return;
   const char* action = doc["action"] | "";
-  if (!strcmp(action, "blink")) blinkUntil = millis() + (uint32_t)(doc["seconds"] | 4) * 1000;
-  else if (!strcmp(action, "reboot")) { delay(100); ESP.restart(); }
+  const char* id = doc["id"] | "";
+  if (!strcmp(action, "blink")) { blinkUntil = millis() + (uint32_t)(doc["seconds"] | 4) * 1000; link.ack(T_ACK, id, action, true); }
+  else if (!strcmp(action, "reboot")) { link.ack(T_ACK, id, action, true); mqtt.loop(); delay(300); ESP.restart(); }
+  else link.ack(T_ACK, id, action, false, "unknown action");
 }
 void ensureMqtt() {
   if (mqtt.connected() || WiFi.status() != WL_CONNECTED || millis() - lastMqttTry < 3000) return;
   lastMqttTry = millis();
-  if (mqtt.connect("esp32-" NODE_ID, T_STATUS, 1, false, "{\"online\":false}")) { mqtt.subscribe(T_CMD, 1); publishStatus(); }
+  if (link.connect("esp32-" NODE_ID, T_STATUS)) { mqtt.subscribe(T_CMD, 1); publishStatus(); }
 }
 
 void setup() {
@@ -112,10 +117,12 @@ void setup() {
   while (WiFi.status() != WL_CONNECTED && millis() < 20000) { digitalWrite(PIN_STATUS_LED, (millis() / 250) % 2); delay(50); }
   startSniffing();   // listens on the AP's channel while staying connected
   mqtt.setServer(MQTT_HOST, MQTT_PORT); mqtt.setBufferSize(512); mqtt.setCallback(onMessage);
-  Serial.printf("StoreGA %s v%s  channel %d\n", NODE_ID, FW_VERSION, WiFi.channel());
+  startWatchdog();   // after the Wi-Fi wait above, which may take 20 s
+  Serial.printf("StoreGA %s v%s  channel %d  （上次重開：%s）\n", NODE_ID, FW_VERSION, WiFi.channel(), resetReason());
 }
 
 void loop() {
+  feedWatchdog();
   uint32_t now = millis();
   drainRing(now);
 #if HAS_RADAR
@@ -124,7 +131,7 @@ void loop() {
 #endif
   digitalWrite(PIN_STATUS_LED, blinkUntil > now ? (now / 120) % 2 : mqtt.connected());
 
-  ensureMqtt(); mqtt.loop();
+  ensureMqtt(); mqtt.loop(); handleOta("storega-" NODE_ID, nullptr);
   if (mqtt.connected()) {
     if (now - lastWifiPub > 5000) publishWifi(now);
     if (now - lastStatus > 5000) publishStatus();

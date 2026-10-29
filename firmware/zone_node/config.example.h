@@ -5,8 +5,11 @@
 #define WIFI_PASSWORD  "your-password"
 #define MQTT_HOST      "192.168.50.10"
 #define MQTT_PORT      1883
+#define MQTT_USER      ""                // broker 有設帳號時填（npm run demo 的預設：device / storega-device）
+#define MQTT_PASS      ""
+#define OTA_PASSWORD   "change-me"       // 無線更新韌體的密碼；不需要 OTA 就刪掉這一行
 #define NODE_ID        "zone-A"          // zone-A / zone-B / zone-C / zone-D
-#define FW_VERSION     "1.3.8"
+#define FW_VERSION     "1.4.0"
 #define HAS_RADAR      1                  // C 區沒有裝 LD2410 就設 0
 
 // Wi-Fi 監聽

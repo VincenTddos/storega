@@ -608,3 +608,24 @@ body{padding:0;margin:0;min-height:100vh}
   .lgday{width:100%}
 }
 @media print{.lgcard,.lgcats{display:none}}
+
+/* ---------- review round: login fields, occupancy correction, link quality ---------- */
+.mcred{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.mcred .f{margin-top:6px!important}
+.occfix{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:22px;padding:16px;border-radius:14px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
+.occfix>div:first-child{flex:1;min-width:220px;font-family:var(--tc)}
+.occfix b{font-size:14px}.occfix p{font-size:13px;line-height:20px;color:var(--ink-3);margin-top:2px}
+.occfix .inp{height:40px}
+.tbl td.loss.bad{color:var(--crit);font-weight:600}
+.valgrid{display:grid;grid-template-columns:repeat(2,minmax(0,180px)) minmax(0,1fr);gap:14px;margin-top:6px;align-items:stretch}
+.valbtn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:150px;border:0;border-radius:18px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);cursor:pointer;font-family:var(--tc);color:var(--ink);transition:transform .12s var(--ease),box-shadow .2s}
+.valbtn b{font-size:18px}.valbtn span{font-family:var(--mono);font-size:44px;line-height:52px;font-weight:500}.valbtn small{font-family:var(--mono);font-size:11px;color:var(--ink-4)}
+.valbtn:not([disabled]):hover{box-shadow:inset 0 0 0 1.5px var(--ink-3)}.valbtn:not([disabled]):active{transform:scale(.97)}
+.valbtn[disabled]{opacity:.45;cursor:default}
+.valbtn.in:not([disabled]){box-shadow:inset 0 0 0 1.5px var(--ok)}.valbtn.out:not([disabled]){box-shadow:inset 0 0 0 1.5px var(--zA)}
+.valbtn.hit{animation:valhit .35s var(--ease)}@keyframes valhit{30%{transform:scale(.95)}}
+.valcmp{display:flex;flex-direction:column;justify-content:center;gap:12px;padding:16px 18px;border-radius:18px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
+.valcmp b{display:block;font-family:var(--mono);font-size:20px;font-weight:500;margin-top:3px}
+.spot{gap:10px;flex-wrap:wrap}.spot .inp{height:38px}
+.vallist{overflow-x:auto}
+@media (max-width:720px){.valgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.valcmp{grid-column:1/-1}.valbtn{min-height:120px}}

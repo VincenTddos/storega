@@ -15,11 +15,11 @@ const lam=h=>(h<10||h>=22)?0:1.5*(0.35+0.55*gauss(h,12.6,1.1)+0.8*gauss(h,18.6,1
 const CUM=[0];for(let m=0;m<720;m++)CUM.push(CUM[m]+lam(10+m/60));
 const cumFrac=t=>CUM[clamp(Math.floor((t-OPEN)/60),0,720)]/CUM[720];
 const NODE_DEFS=[
-  {id:'entry-01',role:'入口節點',ip:'192.168.50.21',fw:'1.4.2',parts:'紅外線×2 · RFID · TM1637 · WS2812 · SG90 · DHT11'},
-  {id:'zone-A',role:'分區節點',ip:'192.168.50.31',fw:'1.3.8',parts:'Wi-Fi 監聽 · LD2410 雷達'},
-  {id:'zone-B',role:'分區節點',ip:'192.168.50.32',fw:'1.3.8',parts:'Wi-Fi 監聽 · LD2410 雷達'},
-  {id:'zone-C',role:'分區節點',ip:'192.168.50.33',fw:'1.3.8',parts:'Wi-Fi 監聽（未裝雷達）'},
-  {id:'zone-D',role:'分區節點',ip:'192.168.50.34',fw:'1.3.8',parts:'Wi-Fi 監聽 · LD2410 雷達'},
+  {id:'entry-01',role:'入口節點',ip:'192.168.50.21',fw:'1.5.0',parts:'紅外線×2 · RFID · TM1637 · WS2812 · SG90 · DHT11'},
+  {id:'zone-A',role:'分區節點',ip:'192.168.50.31',fw:'1.4.0',parts:'Wi-Fi 監聽 · LD2410 雷達'},
+  {id:'zone-B',role:'分區節點',ip:'192.168.50.32',fw:'1.4.0',parts:'Wi-Fi 監聽 · LD2410 雷達'},
+  {id:'zone-C',role:'分區節點',ip:'192.168.50.33',fw:'1.4.0',parts:'Wi-Fi 監聽（未裝雷達）'},
+  {id:'zone-D',role:'分區節點',ip:'192.168.50.34',fw:'1.4.0',parts:'Wi-Fi 監聽 · LD2410 雷達'},
 ];
 const SCN={
   normal:{name:'正常營運',icon:'store',desc:'依時段產生人流，午餐與下班各一波高峰。'},
@@ -94,6 +94,7 @@ function sample(){
   for(const d of NODE_DEFS){
     const n=S.nodes[d.id];if(n.fault||n.rebootUntil>now)continue;
     n.lastSeen=S.t;n.rssi=clamp(Math.round(n.rssi+(R()-.5)*4+(n.rssi0-n.rssi)*.08),-82,-41);
+    if(!S.preroll){const q=n.q||(n.q={recv:0,lost:0,lat:[]});q.recv+=2;q.lat.push(Math.round(18+Math.random()*40));if(q.lat.length>200)q.lat.shift()}  // 展示模式: plausible link figures
     if(d.id==='entry-01'){S.temp=clamp(S.temp+(R()-.5)*.12+(occ()/S.capacity-.5)*.02,22,33);S.hum=clamp(S.hum+(R()-.5)*.6,45,75);continue}
     const zid=d.id.slice(-1),z=S.zones[zid],zd=ZMAP[zid];
     let raw=z.truth*(1.45+R()*.3)+poisson(.8);
@@ -102,10 +103,10 @@ function sample(){
     if(S.scenario==='noise'&&(zid==='A'||zid==='C'))raw+=poisson(7);
     z.raw=Math.round(raw);
     if(zd.radar){z.presence=z.truth>0||R()<.03;z.moving=z.presence&&R()<.7}
-    if(!S.preroll){S.fx.push({type:'wifi',node:d.id});logMsg(`sga/${d.id}/wifi`,{raw:z.raw});if(zd.radar)logMsg(`sga/${d.id}/radar`,{presence:z.presence,moving:z.moving})}
+    if(!S.preroll){S.fx.push({type:'wifi',node:d.id});logMsg(`sga/${d.id}/wifi`,simMsg(d.id,{raw:z.raw}));if(zd.radar)logMsg(`sga/${d.id}/radar`,simMsg(d.id,{presence:z.presence,moving:z.moving}))}
   }
-  if(!S.preroll){const o=occ();logMsg('sga/entry-01/counter',{in:S.today.entries,out:S.today.exits,occupancy:o,queue:S.queue,checkout:S.today.checkouts,gate:S.gateOpen,temp:+S.temp.toFixed(1),hum:Math.round(S.hum)});
-    const d=NODE_DEFS[(S.msgSeq=(S.msgSeq||0)+1)%NODE_DEFS.length],n=S.nodes[d.id];if(n.online)logMsg(`sga/${d.id}/status`,{rssi:n.rssi,ip:n.ip,fw:n.fw,uptime:Math.round(S.t-n.boot)})}
+  if(!S.preroll){const o=occ();logMsg('sga/entry-01/counter',simMsg('entry-01',{in:S.today.entries,out:S.today.exits,occupancy:o,queue:S.queue,checkout:S.today.checkouts,gate:S.gateOpen,temp:+S.temp.toFixed(1),hum:Math.round(S.hum)}));
+    const d=NODE_DEFS[(S.msgSeq=(S.msgSeq||0)+1)%NODE_DEFS.length],n=S.nodes[d.id];if(n.online)logMsg(`sga/${d.id}/status`,simMsg(d.id,{rssi:n.rssi,ip:n.ip,fw:n.fw,uptime:Math.round(S.t-n.boot),reset:'poweron'}))}
   fuse();
   const hr=hourAt(S.t);ZONES.forEach(z=>hr.zsum[z.id]+=S.source==='sim'?S.zones[z.id].truth:S.zones[z.id].est);hr.zn++;
 }
@@ -120,7 +121,7 @@ function minute(){
   S.series.push({t:S.t,occ:occ(),queue:S.queue,cap:S.capacity,gate:S.gateOpen,entries:S.today.entries,checkouts:S.today.checkouts,zones:Object.fromEntries(ZONES.map(z=>{const v=S.zones[z.id];return[z.id,[S.source==='sim'?v.truth:v.est,v.raw,v.est,v.stale?1:0]]}))});if(S.series.length>(S.real?1440:760))S.series.shift();
   ZONES.forEach(z=>{const h=S.zones[z.id].hist;h.push(S.zones[z.id].est);if(h.length>60)h.shift()});
   NODE_DEFS.forEach(d=>{const n=S.nodes[d.id],h=n.rssiHist;h.push(n.online?n.rssi:null);if(h.length>30)h.shift()});
-  if(S.kAuto&&S.sumRaw>0&&occ()>0)S.k=clamp(S.k*.7+(occ()/S.sumRaw)*.3,.2,1.2);
+  if(S.kAuto&&!nrActive()&&S.sumRaw>0&&occ()>0)S.k=clamp(S.k*.7+(occ()/S.sumRaw)*.3,.2,1.2);
   const slot=Math.floor((S.t-OPEN-1)/900);if(slot>=0&&slot<48&&(S.t-OPEN)%900<60){S.upt[slot]=S.uptCur;S.uptCur=0}
 }
 function calibrate(){
@@ -136,19 +137,21 @@ function checkNodes(){
     const n=S.nodes[d.id],was=n.online;
     if(n.rebootUntil>0&&n.rebootUntil<=now){n.rebootUntil=0;if(!S.real&&!n.fault){n.lastSeen=S.t;n.boot=S.t}}  // 真實模式 waits for the board's own heartbeat
     n.online=n.rebootUntil<=now&&(S.t-n.lastSeen)<15;
-    if(was&&!n.online&&n.rebootUntil<=now)addAlert('off-'+d.id,'crit',`${d.id} 離線`,`${n.will?'broker 代為送出遺言（板子斷線）':'超過 15 秒沒有心跳'}，${d.role}資料暫停更新。`,{cool:0,target:{view:'devices',node:d.id}});
+    if(was&&!n.online&&n.rebootUntil<=now&&!nrActive())addAlert('off-'+d.id,'crit',`${d.id} 離線`,`${n.will?'broker 代為送出遺言（板子斷線）':'超過 15 秒沒有心跳'}，${d.role}資料暫停更新。`,{cool:0,target:{view:'devices',node:d.id}});
     if(was&&!n.online)n.dropped=true;
-    if(!was&&n.online&&n.dropped&&(n.dropped=false,true))addAlert('on-'+d.id,'info',`${d.id} 恢復連線`,`訊號 ${n.rssi} dBm`,{cool:0,target:{view:'devices',node:d.id}});
+    if(!was&&n.online&&n.dropped&&(n.dropped=false,true)&&!nrActive())addAlert('on-'+d.id,'info',`${d.id} 恢復連線`,`訊號 ${n.rssi} dBm`,{cool:0,target:{view:'devices',node:d.id}});
     if(!n.online){if(n.seen)S.uptCur=2}else if(n.rssi<-80||n.rebootUntil>now)S.uptCur=Math.max(S.uptCur,1);
   }
 }
 function checkAlerts(){
   const o=occ(),r=o/S.capacity;
+  if(!nrActive()){  // with Node-RED on the broker, its rules decide (see onSystem)
   if(r>=1)addAlert('cap100','crit','已達人數上限，閘門關閉',`場內 ${o} / ${S.capacity} 人，門外排隊 ${S.queue} 人。`,{target:{view:'overview'}});
   else if(r>=.8)addAlert('cap80','warn','場內人數接近上限',`目前 ${o} / ${S.capacity} 人（${Math.round(r*100)}%）。`,{target:{view:'overview'}});
   for(const zd of ZONES){const z=S.zones[zd.id];if(!z.stale&&z.est>S.threshold)addAlert('z-'+zd.id,'warn',`${zd.name}擁擠`,`校正後估計 ${z.est} 人，門檻 ${S.threshold} 人。`,{target:{view:'live',zone:zd.id}})}
   if(S.queue>0&&!S.qLog){S.qLog=true;slogOnce('q1',120,'flow','warn','門外開始排隊',`場內 ${o} / ${S.capacity} 人`)}else if(!S.queue&&S.qLog){S.qLog=false;slogOnce('q0',120,'flow','info','門外排隊已消化','')}
   if(S.temp>=30)addAlert('temp','warn','入口溫度偏高',`DHT11 讀值 ${S.temp.toFixed(1)}°C。`);
+  }
 }
 function addAlert(key,level,title,detail,{cool=900,target=null,cat=null}={}){
   const last=S.alertLast[key];if(cool&&last!=null&&S.t-last<cool)return;
@@ -171,23 +174,34 @@ async function mqttConnect(url){
   S.conn='connecting';S.url=url;onMqtt.status('busy','正在連線到 '+url);slog('conn','info',`連線到 ${url}`,'');
   try{await loadMqtt()}catch{S.conn='err';slog('conn','error','mqtt.js 載入失敗','需要網路才能從 unpkg.com 載入 MQTT 函式庫');onMqtt.status('err','mqtt.js 載入失敗，請確認電腦有網路。');return}
   if(client){client.end(true);client=null}
-  const c=client=window.mqtt.connect(url,{reconnectPeriod:3000,connectTimeout:6000,clientId:'storega-ui-'+Math.random().toString(16).slice(2,8)});
+  const user=store.get('mqttUser',''),pass=store.get('mqttPass','');S.connErr='';
+  const c=client=window.mqtt.connect(url,{reconnectPeriod:3000,connectTimeout:6000,clientId:'storega-ui-'+Math.random().toString(16).slice(2,8),...(user?{username:user,password:pass}:{})});
   c.on('connect',()=>{if(c!==client)return;client.subscribe('sga/+/+');if(!S.real)startReal(),onLiveReset();S.conn='ok';S.everConnected=true;setSource('mqtt');store.set('mqttUrl',url);
     slog('conn','info','已連上 Node-RED',`${url} · 訂閱 sga/+/+`);onMqtt.status('ok','已連線 · 訂閱 sga/+/+')});
-  c.on('error',e=>{if(c!==client)return;S.conn='err';slogOnce('conn-err',60,'conn','error','連線失敗',e.message);onMqtt.status('err',`連線失敗：${e.message}。請確認 Aedes 的 WebSocket 埠已開啟、電腦與 ESP32 在同一個網路。`)});
+  c.on('error',e=>{if(c!==client)return;S.conn='err';const auth=/username or password|not authorized/i.test(e.message);
+    S.connErr=auth?(user?'帳號或密碼錯誤，或這個帳號沒有權限':'這個 broker 需要帳號密碼'):e.message;
+    slogOnce('conn-err',60,'conn','error',auth?'登入被拒絕':'連線失敗',auth?`${S.connErr}（帳號：${user||'未填'}）`:e.message);
+    onMqtt.status('err',auth?`${S.connErr}。到「設定 → 資料來源」填 broker 的帳號密碼。`:`連線失敗：${e.message}。請確認 Aedes 的 WebSocket 埠已開啟、電腦與 ESP32 在同一個網路。`)});
   c.on('close',()=>{if(c!==client||!S.real)return;if(S.conn==='ok')slog('conn','warn','與 Node-RED 的連線中斷','每 3 秒自動重試');if(S.conn!=='err')S.conn='down';onMqtt.status('busy','連線中斷，3 秒後自動重試…')});
   c.on('message',(topic,buf)=>{if(c!==client)return;let m;try{m=JSON.parse(buf.toString())}catch{return}if(!S.paused)onMqtt(topic,m)});
 }
 function mqttDisconnect(){if(client){client.end(true);client=null}if(S)S.conn='idle'}
 function onMqtt(topic,m){
-  const [,id,kind]=topic.split('/'),n=S.nodes[id];if(!n)return;
+  const [,id,kind]=topic.split('/');if(id==='system'){logMsg(topic,m,'in');onSystem(kind,m);return}
+  const n=S.nodes[id];if(!n)return;
   S.lastData=performance.now();logMsg(topic,m,'in');
   if(m.online===false){n.will=true;n.lastSeen=S.t-99;return}  /* MQTT last will: the board dropped off the network */
-  if(!n.seen){n.seen=true;slog('node','info',`${id} 開始回報`,`${topic}${m.ip?` · ${m.ip}`:''}`)}
+  if(!n.seen){n.seen=true;slog('node','info',`${id} 開始回報`,`${topic}${m.ip?` · ${m.ip}`:''}`);if(BADRESET.includes(m.reset))slog('node','warn',`${id} 上次重開的原因：${RESET[m.reset]}`,'')}
   n.lastSeen=S.t;n.will=false;
+  if(m.seq!=null){const q=n.q||(n.q={recv:0,lost:0,lat:[]});q.recv++;if(n.lastSeq!=null&&m.seq>n.lastSeq+1)q.lost+=m.seq-n.lastSeq-1;n.lastSeq=m.seq;  // a smaller seq = the board restarted
+    if(m.ts>1e12){q.lat.push(Date.now()-m.ts);if(q.lat.length>200)q.lat.shift()}}
+  if(m.reset)n.reset=m.reset;
+  if(kind==='ack'){onAck(id,m);return}
+  if(kind==='event'){if(m.type==='auto_zero'&&!nrActive())addAlert('autozero','info','打烊後場內人數歸零',`紅外線今天少算了 ${m.was} 人的離場，已由入口節點修正。`,{cool:0,cat:'flow'});
+    else if(m.type==='button')slog('op','info','按下入口的校正按鈕','Node-RED 會以入口人數重新計算 k');return}
   if(m.ip&&n.ip&&m.ip!==n.ip)slog('node','warn',`${id} 的 IP 改變`,`${n.ip} → ${m.ip}`);
   if(m.fw&&n.fw&&m.fw!==n.fw)slog('node','info',`${id} 韌體更新`,`v${n.fw} → v${m.fw}`);
-  if(m.uptime!=null&&n.boot!=null&&(S.t-m.uptime)-n.boot>30)slog('node','warn',`${id} 重新開機過`,`運行時間歸零（${Math.round(m.uptime)} 秒）`);
+  if(m.uptime!=null&&n.boot!=null&&(S.t-m.uptime)-n.boot>30)slog('node',BADRESET.includes(m.reset)?'error':'warn',`${id} 重新開機過`,`運行時間歸零（${Math.round(m.uptime)} 秒）${m.reset?`，原因：${RESET[m.reset]||m.reset}`:''}`);
   if(m.rssi!=null)n.rssi=m.rssi;if(m.ip)n.ip=m.ip;if(m.fw)n.fw=m.fw;if(m.uptime!=null)n.boot=S.t-m.uptime;
   if(kind==='counter'){
     if(m.occupancy!=null)S.mqttOcc=m.occupancy;
@@ -209,8 +223,43 @@ function onMqtt(topic,m){
   fuse();
 }
 onMqtt.status=()=>{};
-function mqttCmd(node,payload){logMsg(`sga/${node}/cmd`,payload,'out');slog('cmd','info',`${node} ← ${payload.action}`,payload);if(client&&S.source==='mqtt')client.publish(`sga/${node}/cmd`,JSON.stringify(payload))}
+/* commands the board itself carries out get an id; the board answers on sga/<node>/ack (applied, or refused and why).
+   No answer within 6 s is logged too — that is how the dashboard knows a command really arrived. */
+const ACKS={'entry-01':['gate','capacity','set_occupancy','blink','reboot','reset_day'],zone:['blink','reboot']};
+const CMDNAME={gate:'閘門模式',capacity:'人數上限',set_occupancy:'場內人數校正',blink:'閃燈',reboot:'重新開機',reset_day:'今日歸零',threshold:'擁擠門檻',calibrate:'Wi-Fi 校正'};
+const RESET={poweron:'通電',software:'軟體重開（指令或更新）',watchdog:'看門狗（程式卡住）',panic:'程式當機',brownout:'電壓不足',other:'其他'},BADRESET=['watchdog','panic','brownout'];
+const pendingCmd=new Map();let cmdSeq=0,onCmdResult=()=>{};
+function mqttCmd(node,payload){
+  const wants=(ACKS[node]||ACKS.zone).includes(payload.action);
+  if(wants){payload={...payload,id:'c'+Date.now().toString(36)+(++cmdSeq)};const c={node,action:payload.action,id:payload.id,at:performance.now()};pendingCmd.set(c.id,c);
+    c.timer=setTimeout(()=>{if(!pendingCmd.delete(c.id))return;c.ok=null;S.nodes[node].lastCmd=c;slog('cmd','warn',`${node} 沒有回覆「${CMDNAME[c.action]||c.action}」`,'等了 6 秒：板子可能離線，或還在用沒有回覆功能的舊韌體');onCmdResult(c,null)},6000)}
+  logMsg(`sga/${node}/cmd`,payload,'out');slog('cmd','info',`${node} ← ${payload.action}`,payload);
+  if(S.real){if(client&&S.conn==='ok')client.publish(`sga/${node}/cmd`,JSON.stringify(payload),{qos:1})}
+  else if(wants)setTimeout(()=>onAck(node,{id:payload.id,action:payload.action,ok:true}),40+Math.random()*60);  // 展示模式: the simulated board answers
+}
+function onAck(node,m){const c=pendingCmd.get(m.id);if(!c)return;pendingCmd.delete(m.id);clearTimeout(c.timer);
+  c.ms=Math.round(performance.now()-c.at);c.ok=!!m.ok;c.reason=m.reason||'';S.nodes[node].lastCmd=c;
+  slog('cmd',c.ok?'info':'error',`${node} ${c.ok?'已執行':'拒絕了'}「${CMDNAME[c.action]||c.action}」`,c.ok?`來回 ${c.ms} ms`:c.reason);onCmdResult(c,m)}
+/* link quality from seq/ts: lost messages and latency (median / 95th percentile, ms) */
+function linkQ(n){const q=n.q;if(!q||!q.recv)return null;const s=[...q.lat].sort((a,b)=>a-b),p=f=>s.length?s[Math.min(s.length-1,Math.floor(f*s.length))]:null;
+  return{loss:q.lost/(q.recv+q.lost),lost:q.lost,recv:q.recv,p50:p(.5),p95:p(.95)}}
+
+/* ================= Node-RED as the rules engine =================
+   When Node-RED is on the broker (retained sga/system/online plus the state it sends every second), its alerts, k and
+   history are the ones that count; the dashboard's own rules only run without it (e.g. npm run demo's plain broker). */
+const nrActive=()=>!!(S&&S.real&&S.nr&&S.nr.online!==false&&performance.now()-(S.nr.stateAt||-1e9)<10000);
+const mergeDays=(a,b)=>{const m=new Map();for(const d of a)m.set(d.date,d);for(const d of b)m.set(d.date,d);return[...m.values()].sort((x,y)=>x.date<y.date?-1:1)};
+function onSystem(kind,m){if(!S.real)return;const nr=S.nr||(S.nr={});
+  if(kind==='online'){const was=nr.online;nr.online=m.online!==false;if(was!==nr.online)slog('conn',nr.online?'info':'warn',nr.online?'Node-RED 上線':'Node-RED 離線',nr.online?'規則、告警與 k 由 Node-RED 判斷':'改由儀表板自己判斷規則');return}
+  if(kind==='state'){const first=performance.now()-(nr.stateAt||-1e9)>10000;nr.stateAt=performance.now();if(nr.online==null)nr.online=true;
+    if(first)slog('conn','info','收到 Node-RED 的整店狀態','規則、告警與校正係數 k 以 Node-RED 為準');if(m.k>0)S.k=m.k;return}
+  if(kind==='alert'){const k=String(m.key||''),node=(k.match(/^(?:off|on)-(.+)$/)||[])[1],zone=(k.match(/^z-([A-D])$/)||[])[1];
+    addAlert('nr-'+k,m.level==='crit'?'crit':m.level==='warn'?'warn':'info',m.title||'Node-RED 告警',m.detail||'',{cool:0,target:node?{view:'devices',node}:zone?{view:'live',zone}:{view:'overview'},cat:node?'node':'alert'});return}
+  if(kind==='history'&&Array.isArray(m.days)){nr.history=m.days.filter(d=>d&&d.date&&d.date<S.date);S.days=mergeDays(loadHistory(),nr.history).slice(-6);slog('sys','info','收到 Node-RED 保存的歷史',`${nr.history.length} 天`)}
+}
 /* every message in or out, newest first; the 裝置 page shows it as a live console */
+/* 展示模式: the simulated boards stamp their messages like the firmware does (seq per board, ts in ms) */
+const simMsg=(id,obj)=>{const n=S.nodes[id];return{...obj,seq:n.simSeq=(n.simSeq||0)+1,ts:Date.now()}};
 function logMsg(topic,obj,dir='in'){const L=S.msgs||(S.msgs=[]);L.unshift({t:S.t,wall:Date.now(),topic,dir,sim:S.source==='sim',body:JSON.stringify(obj)});if(L.length>300)L.length=300;S.msgCount=(S.msgCount||0)+1}
 function logGate(){slogOnce('gate',20,'flow',S.gateOpen?'info':'warn',S.gateOpen?'閘門開啟':'閘門關閉',`場內 ${occ()} / ${S.capacity} 人${S.queue?`，門外 ${S.queue} 人`:''}`)}
 

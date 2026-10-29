@@ -35,6 +35,15 @@ const flows=[
   {id:'f_hour',type:'function',z:T,name:'整點紀錄 CSV',func:fn('hourly.js'),outputs:1,timeout:0,noerr:0,initialize:'',finalize:'',libs:[],x:390,y,wires:[['w_csv']]},
   {id:'w_csv',type:'file',z:T,name:'storega-log.csv',filename:'storega-log.csv',filenameType:'str',appendNewline:true,createDir:true,overwriteFile:'false',encoding:'utf8',x:620,y,wires:[[]]},
 
+  {id:'i_day',type:'inject',z:T,name:'每分鐘',props:[{p:'payload'}],repeat:'60',crontab:'',once:true,onceDelay:'8',topic:'',payload:'',payloadType:'date',x:150,y:row()+40,wires:[['f_day']]},
+  {id:'i_hload',type:'inject',z:T,name:'部署時讀取歷史',props:[{p:'payload'}],repeat:'',crontab:'',once:true,onceDelay:'2',topic:'',payload:'',payloadType:'date',x:170,y:y+40,wires:[['r_hist']]},
+  {id:'r_hist',type:'file in',z:T,name:'storega-history.json',filename:'storega-history.json',filenameType:'str',format:'utf8',chunk:false,sendError:false,encoding:'utf8',allProps:false,x:410,y:y+40,wires:[['f_hparse']]},
+  {id:'c_hist',type:'catch',z:T,name:'第一次還沒有檔案',scope:['r_hist'],uncaught:false,x:410,y:y+80,wires:[['f_hparse']]},
+  {id:'f_hparse',type:'function',z:T,name:'解析歷史',func:"let h=[];try{if(!msg.error)h=JSON.parse(msg.payload)}catch(e){node.warn('storega-history.json 無法解析，從空的開始')}\nreturn {history:Array.isArray(h)?h:[]};",outputs:1,timeout:0,noerr:0,initialize:'',finalize:'',libs:[],x:620,y:y+40,wires:[['f_day']]},
+  {id:'f_day',type:'function',z:T,name:'每日紀錄與歷史',func:fn('daily.js'),outputs:2,timeout:0,noerr:0,initialize:'',finalize:'',libs:[],x:400,y,wires:[['o_hist'],['w_hist']]},
+  {id:'o_hist',type:'mqtt out',z:T,name:'sga/system/history',topic:'sga/system/history',qos:'1',retain:'true',respTopic:'',contentType:'',userProps:'',correl:'',expiry:'',broker:C,x:660,y,wires:[]},
+  {id:'w_hist',type:'file',z:T,name:'storega-history.json',filename:'storega-history.json',filenameType:'str',appendNewline:false,createDir:true,overwriteFile:'true',encoding:'utf8',x:660,y:y+40,wires:[[]]},
+
   {id:'i_cfg',type:'inject',z:T,name:'部署時下發上限',props:[{p:'payload'}],repeat:'',crontab:'',once:true,onceDelay:'5',topic:'',payload:'',payloadType:'date',x:170,y:row()+20,wires:[['f_cfg']]},
   {id:'f_cfg',type:'function',z:T,name:'上限 → entry-01',func:"const st=flow.get('sga');const cap=(st&&st.capacity)||Number(env.get('STOREGA_CAPACITY'))||40;\nreturn {topic:'sga/entry-01/cmd',payload:{action:'capacity',value:cap}};",outputs:1,timeout:0,noerr:0,initialize:'',finalize:'',libs:[],x:400,y,wires:[['o_cmd']]}
 ];

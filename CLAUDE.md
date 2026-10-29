@@ -5,7 +5,8 @@
 ## 跑起來
 
 - 儀表板不需要建置：直接開 `dashboard/index.html`。第一次會問模式：**真實模式**（`S.real`，只顯示 MQTT 收到的資料，存在 localStorage）或**展示模式**（模擬器，不保存）。
-- 本機真的 MQTT：`cd tools && npm install && npm run demo` → http://localhost:8080 → 真實模式 → `ws://localhost:8080`。
+- 本機真的 MQTT：`cd tools && npm install && npm run demo` → http://localhost:8080 → 真實模式 → `ws://localhost:8080`，帳號 `dashboard` 密碼 `storega-dashboard`（`tools/broker.js` 預設要登入並有角色權限，見 `docs/mqtt.md`）。
+- 評審可能問的問題與答案在 `docs/review.md`；改了相關功能要一起更新。
 - 真實模式不准出現假資料：沒收到的值顯示「—／尚未回報」，`YK()`、`yesterdayNow()`、`yOcc()`、`yHour()` 沒有紀錄時回傳 `null`，頁面要處理。
 - 外部資源：Google Fonts、`unpkg.com/three@0.163.0`、`unpkg.com/mqtt@5.10.1`（需要網路）。
 - 全部測試：`sh scripts/test-all.sh`（需要 Node 18+ 與 g++；tools 的測試要先 `npm install`）。
@@ -13,7 +14,7 @@
 ## 共同的協定
 
 `docs/mqtt.md` 是唯一的協定說明。改任何一邊的訊息格式，四個地方要一起改並跑測試：
-`firmware/common/storega_core.h`（JSON 產生）、`tools/fake-nodes.js`（模擬板子）、`node-red/functions/fusion.js`、`dashboard/assets/js/model.js` 的 `onMqtt()`。
+`firmware/common/storega_core.h`（JSON 產生）、`tools/fake-nodes.js`（模擬板子）、`node-red/functions/fusion.js`、`dashboard/assets/js/model.js` 的 `onMqtt()`。每則上行訊息都帶 `seq`/`ts`；板子負責的指令帶 `id`，要在 `sga/<node>/ack` 回覆。
 
 ## 儀表板（`dashboard/assets/js/`，依載入順序）
 
@@ -32,7 +33,7 @@
 
 ## 韌體（`firmware/`）
 
-- 純邏輯都在 `common/storega_core.h`（不呼叫 Arduino API）。**改 `common/` 之後要跑 `sh firmware/sync-common.sh`**，因為 Arduino 只編譯 sketch 資料夾內的檔案，每個 sketch 有一份副本；`firmware/test/run.sh` 會檢查副本是否同步。
+- 純邏輯都在 `common/storega_core.h`（不呼叫 Arduino API）；`common/storega_net.h` 放兩種板子共用的網路程式（登入、`seq`/`ts`、指令回覆、看門狗、OTA）。**改 `common/` 之後要跑 `sh firmware/sync-common.sh`**，因為 Arduino 只編譯 sketch 資料夾內的檔案，每個 sketch 有一份副本；`firmware/test/run.sh` 會檢查副本是否同步。
 - `firmware/test/mock/` 是簡化的 Arduino 標頭檔，只用來做語法檢查，不代表真實 API 的全部行為。
 - `config.h` 不進 git；範本是 `config.example.h`，儀表板「設定 → 韌體設定」也能產生。
 

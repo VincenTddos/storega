@@ -3,5 +3,5 @@
 const {startBroker}=require('./broker');
 const {startNodes}=require('./fake-nodes');
 startBroker().then(()=>{const n=startNodes({url:'mqtt://localhost:'+(process.env.MQTT_PORT||1883)});
-  console.log('\n打開 http://localhost:8080 → 設定 → 資料來源 → Node-RED（MQTT）→ 位址 ws://localhost:8080 → 連線\n');
+  console.log('\n打開 http://localhost:8080 → 真實模式 → 位址 ws://localhost:8080、帳號 dashboard、密碼 storega-dashboard → 連線\n');
   process.on('SIGINT',()=>{n.stop();process.exit(0)})});

@@ -108,7 +108,23 @@ int main() {
     CHECK(std::string(j) == "{\"in\":412,\"out\":393,\"occupancy\":19,\"queue\":0,\"checkout\":129,\"gate\":true,\"temp\":24.1,\"hum\":60,\"dwell_avg\":1014,\"mode\":\"auto\",\"capacity\":40}");
     counterJson(j, sizeof j, s, 0.0f / 0.0f, 0.0f / 0.0f, 0); CHECK(strstr(j, "\"temp\":null,\"hum\":null") != nullptr);
     statusJson(j, sizeof j, -56, "192.168.50.31", "1.3.8", 22140, 181000);
-    CHECK(std::string(j) == "{\"rssi\":-56,\"ip\":\"192.168.50.31\",\"fw\":\"1.3.8\",\"uptime\":22140,\"heap\":181000}");
+    CHECK(std::string(j) == "{\"rssi\":-56,\"ip\":\"192.168.50.31\",\"fw\":\"1.3.8\",\"uptime\":22140,\"heap\":181000,\"reset\":\"other\"}");
+  }
+
+  SECTION("Occupancy correction, message stamps, command acks");
+  { Store st; st.in = 50; st.out = 44;
+    CHECK(st.setOccupancy(0) && st.occupancy() == 0 && st.in == 50);        // closing time: nobody is inside
+    CHECK(st.setOccupancy(3) && st.occupancy() == 3);
+    CHECK(!st.setOccupancy(51) && st.occupancy() == 3);                       // cannot be more than came in today
+    CHECK(!st.setOccupancy(-1));
+    char b[96] = "{\"raw\":4}";
+    CHECK(stampJson(b, sizeof b, 17, 1730000000123ULL) > 0 && !strcmp(b, "{\"raw\":4,\"seq\":17,\"ts\":1730000000123}"));
+    char small[20] = "{\"raw\":4}"; CHECK(stampJson(small, sizeof small, 1, 0) == -1 && !strcmp(small, "{\"raw\":4}"));  // too long: left untouched
+    char a[128]; ackJson(a, sizeof a, "c12", "capacity", false, "out of range");
+    CHECK(!strcmp(a, "{\"id\":\"c12\",\"action\":\"capacity\",\"ok\":false,\"reason\":\"out of range\"}"));
+    ackJson(a, sizeof a, "c13", "gate", true, ""); CHECK(!strcmp(a, "{\"id\":\"c13\",\"action\":\"gate\",\"ok\":true}"));
+    CHECK(!strcmp(resetReasonName(6), "watchdog") && !strcmp(resetReasonName(1), "poweron") && !strcmp(resetReasonName(9), "brownout"));
+    char st2[160]; statusJson(st2, sizeof st2, -60, "10.0.0.2", "1.5.0", 12, 1000, "watchdog"); CHECK(strstr(st2, "\"reset\":\"watchdog\"") != nullptr);
   }
 
   printf("\n%d / %d checks passed\n", checks - fails, checks);

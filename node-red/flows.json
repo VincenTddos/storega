@@ -110,7 +110,7 @@
     "type": "function",
     "z": "sga_tab",
     "name": "感測融合與規則",
-    "func": "// 感測融合：收下所有 sga/+/+ 訊息，算出每區的校正後人數，檢查規則並發出告警\n// 輸出 1 → sga/system/state（整店狀態，retain）  輸出 2 → sga/system/alert  輸出 3 → 下行指令（msg.topic 已設好）\nconst NODES = ['entry-01', 'zone-A', 'zone-B', 'zone-C', 'zone-D'];\nconst RADAR = { A: true, B: true, C: false, D: true };\nconst st = flow.get('sga') || {\n  capacity: Number(env.get('STOREGA_CAPACITY')) || 40,\n  threshold: Number(env.get('STOREGA_THRESHOLD')) || 14,\n  gateMode: 'auto', k: 0.62, kAuto: true,\n  entry: { in: 0, out: 0, occupancy: 0, queue: 0, checkout: 0, gate: true, temp: null, hum: null },\n  zones: { A: {}, B: {}, C: {}, D: {} }, nodes: {}, cool: {}, lastState: 0\n};\nconst [, id, kind] = String(msg.topic).split('/');\nconst p = msg.payload && typeof msg.payload === 'object' ? msg.payload : {};\nconst now = Date.now();\nconst alerts = [];\nconst cmds = [];\n\nfunction alert(key, level, title, detail, coolMs = 15 * 60 * 1000) {\n  if (st.cool[key] && now - st.cool[key] < coolMs) return;\n  st.cool[key] = now;\n  alerts.push({ payload: { key, level, title, detail, ts: now, source: 'node-red' } });\n}\n\nif (NODES.includes(id)) {\n  const n = st.nodes[id] || (st.nodes[id] = {});\n  if (kind === 'cmd') {\n    // 儀表板送給板子的指令也會經過這裡，用來同步 Node-RED 記得的設定\n    if (p.action === 'capacity' && p.value >= 10 && p.value <= 80) st.capacity = Number(p.value);\n    if (p.action === 'gate' && ['auto', 'open', 'closed'].includes(p.mode)) st.gateMode = p.mode;\n    if (p.action === 'calibrate' && p.k > 0) { st.k = Number(p.k); }\n    if (p.action === 'threshold' && p.value >= 4 && p.value <= 30) st.threshold = Number(p.value);\n  } else if (p.online === false) {\n    n.last = 0; // MQTT 遺言：板子斷線\n  } else {\n    n.last = now;\n    if (p.rssi != null) n.rssi = p.rssi;\n    if (p.ip) n.ip = p.ip;\n    if (p.fw) n.fw = p.fw;\n    if (kind === 'counter') {\n      Object.assign(st.entry, p);\n      if (['auto', 'open', 'closed'].includes(p.mode)) st.gateMode = p.mode;\n      if (p.capacity >= 10) st.capacity = p.capacity;\n    }\n    const z = id.startsWith('zone-') ? st.zones[id.slice(-1)] : null;\n    if (z && kind === 'wifi' && p.raw != null) z.raw = Number(p.raw);\n    if (z && kind === 'radar') { z.presence = !!p.presence; z.moving = !!p.moving; }\n  }\n}\n\n// 融合：雷達判斷無人 → 0；否則 Wi-Fi 原始數 × k\nlet sumRaw = 0, sumEst = 0;\nfor (const zid of Object.keys(st.zones)) {\n  const z = st.zones[zid], node = st.nodes['zone-' + zid] || {};\n  z.online = !!node.last && now - node.last < 15000;\n  z.est = RADAR[zid] && z.presence === false ? 0 : Math.round((z.raw || 0) * st.k);\n  if (z.online) { sumRaw += z.raw || 0; sumEst += z.est; }\n}\nst.sumRaw = sumRaw; st.sumEst = sumEst;\n\n// 規則\nconst occ = Number(st.entry.occupancy) || 0, ratio = occ / st.capacity;\nif (ratio >= 1) alert('cap100', 'crit', '已達人數上限，閘門關閉', `場內 ${occ} / ${st.capacity} 人，門外排隊 ${st.entry.queue || 0} 人。`, 5 * 60 * 1000);\nelse if (ratio >= 0.8) alert('cap80', 'warn', '場內人數接近上限', `目前 ${occ} / ${st.capacity} 人（${Math.round(ratio * 100)}%）。`);\nfor (const zid of Object.keys(st.zones)) {\n  const z = st.zones[zid];\n  if (z.online && z.est > st.threshold) alert('z-' + zid, 'warn', `${zid} 區擁擠`, `校正後估計 ${z.est} 人，門檻 ${st.threshold} 人。`);\n}\nif (st.entry.temp != null && st.entry.temp >= 30) alert('temp', 'warn', '入口溫度偏高', `DHT11 讀值 ${st.entry.temp}°C。`, 30 * 60 * 1000);\n\nflow.set('sga', st);\nnode.status({ fill: ratio >= 1 ? 'red' : ratio >= 0.8 ? 'yellow' : 'green', shape: 'dot', text: `場內 ${occ}/${st.capacity} · k ${st.k.toFixed(2)}` });\n\n// 狀態最多每秒送一次\nlet state = null;\nif (now - st.lastState >= 1000) {\n  st.lastState = now;\n  state = { payload: {\n    ts: now, occupancy: occ, capacity: st.capacity, queue: st.entry.queue || 0, gate: !!st.entry.gate, gateMode: st.gateMode,\n    entries: st.entry.in || 0, checkouts: st.entry.checkout || 0, conversion: st.entry.in ? +(st.entry.checkout / st.entry.in).toFixed(3) : 0,\n    temp: st.entry.temp, hum: st.entry.hum, k: +st.k.toFixed(3), threshold: st.threshold,\n    zones: Object.fromEntries(Object.entries(st.zones).map(([zid, z]) => [zid, { raw: z.raw || 0, est: z.est, presence: z.presence ?? null, online: z.online }])),\n    nodes: Object.fromEntries(NODES.map(nid => { const n = st.nodes[nid] || {}; return [nid, { online: !!n.last && now - n.last < 15000, rssi: n.rssi ?? null }]; }))\n  } };\n}\nreturn [state, alerts.length ? alerts : null, cmds.length ? cmds : null];\n",
+    "func": "// 感測融合：收下所有 sga/+/+ 訊息，算出每區的校正後人數，檢查規則並發出告警\n// 輸出 1 → sga/system/state（整店狀態，retain）  輸出 2 → sga/system/alert  輸出 3 → 下行指令（msg.topic 已設好）\nconst NODES = ['entry-01', 'zone-A', 'zone-B', 'zone-C', 'zone-D'];\nconst RADAR = { A: true, B: true, C: false, D: true };\nconst st = flow.get('sga') || {\n  capacity: Number(env.get('STOREGA_CAPACITY')) || 40,\n  threshold: Number(env.get('STOREGA_THRESHOLD')) || 14,\n  gateMode: 'auto', k: 0.62, kAuto: true,\n  entry: { in: 0, out: 0, occupancy: 0, queue: 0, checkout: 0, gate: true, temp: null, hum: null },\n  zones: { A: {}, B: {}, C: {}, D: {} }, nodes: {}, cool: {}, lastState: 0\n};\nconst [, id, kind] = String(msg.topic).split('/');\nconst p = msg.payload && typeof msg.payload === 'object' ? msg.payload : {};\nconst now = Date.now();\nconst alerts = [];\nconst cmds = [];\n\nfunction alert(key, level, title, detail, coolMs = 15 * 60 * 1000) {\n  if (st.cool[key] && now - st.cool[key] < coolMs) return;\n  st.cool[key] = now;\n  alerts.push({ payload: { key, level, title, detail, ts: now, source: 'node-red' } });\n}\n\nif (NODES.includes(id)) {\n  const n = st.nodes[id] || (st.nodes[id] = {});\n  if (kind === 'cmd') {\n    // 儀表板送給板子的指令也會經過這裡，用來同步 Node-RED 記得的設定\n    if (p.action === 'capacity' && p.value >= 10 && p.value <= 80) st.capacity = Number(p.value);\n    if (p.action === 'gate' && ['auto', 'open', 'closed'].includes(p.mode)) st.gateMode = p.mode;\n    if (p.action === 'calibrate' && p.k > 0) { st.k = Number(p.k); }\n    if (p.action === 'threshold' && p.value >= 4 && p.value <= 30) st.threshold = Number(p.value);\n  } else if (kind === 'event' && p.type === 'auto_zero') {\n    // 入口板子在打烊 30 分鐘後把剩下的人數歸零：紅外線今天少算了這麼多人的離場\n    n.last = now;\n    alert('autozero', 'info', '打烊後場內人數歸零', `紅外線今天少算了 ${p.was} 人的離場，已由入口節點修正。`, 0);\n  } else if (kind === 'ack') {\n    n.last = now;  // 指令回覆只代表板子還活著，內容給儀表板看\n  } else if (p.online === false) {\n    n.last = 0; // MQTT 遺言：板子斷線\n  } else {\n    n.last = now;\n    if (p.rssi != null) n.rssi = p.rssi;\n    if (p.ip) n.ip = p.ip;\n    if (p.fw) n.fw = p.fw;\n    if (kind === 'counter') {\n      Object.assign(st.entry, p);\n      if (['auto', 'open', 'closed'].includes(p.mode)) st.gateMode = p.mode;\n      if (p.capacity >= 10) st.capacity = p.capacity;\n    }\n    const z = id.startsWith('zone-') ? st.zones[id.slice(-1)] : null;\n    if (z && kind === 'wifi' && p.raw != null) z.raw = Number(p.raw);\n    if (z && kind === 'radar') { z.presence = !!p.presence; z.moving = !!p.moving; }\n  }\n}\n\n// 融合：雷達判斷無人 → 0；否則 Wi-Fi 原始數 × k\nlet sumRaw = 0, sumEst = 0;\nfor (const zid of Object.keys(st.zones)) {\n  const z = st.zones[zid], node = st.nodes['zone-' + zid] || {};\n  z.online = !!node.last && now - node.last < 15000;\n  z.est = RADAR[zid] && z.presence === false ? 0 : Math.round((z.raw || 0) * st.k);\n  if (z.online) { sumRaw += z.raw || 0; sumEst += z.est; }\n}\nst.sumRaw = sumRaw; st.sumEst = sumEst;\n\n// 規則\nconst occ = Number(st.entry.occupancy) || 0, ratio = occ / st.capacity;\nif (ratio >= 1) alert('cap100', 'crit', '已達人數上限，閘門關閉', `場內 ${occ} / ${st.capacity} 人，門外排隊 ${st.entry.queue || 0} 人。`, 5 * 60 * 1000);\nelse if (ratio >= 0.8) alert('cap80', 'warn', '場內人數接近上限', `目前 ${occ} / ${st.capacity} 人（${Math.round(ratio * 100)}%）。`);\nfor (const zid of Object.keys(st.zones)) {\n  const z = st.zones[zid];\n  if (z.online && z.est > st.threshold) alert('z-' + zid, 'warn', `${zid} 區擁擠`, `校正後估計 ${z.est} 人，門檻 ${st.threshold} 人。`);\n}\nif (st.entry.temp != null && st.entry.temp >= 30) alert('temp', 'warn', '入口溫度偏高', `DHT11 讀值 ${st.entry.temp}°C。`, 30 * 60 * 1000);\n\nflow.set('sga', st);\nnode.status({ fill: ratio >= 1 ? 'red' : ratio >= 0.8 ? 'yellow' : 'green', shape: 'dot', text: `場內 ${occ}/${st.capacity} · k ${st.k.toFixed(2)}` });\n\n// 狀態最多每秒送一次\nlet state = null;\nif (now - st.lastState >= 1000) {\n  st.lastState = now;\n  state = { payload: {\n    ts: now, occupancy: occ, capacity: st.capacity, queue: st.entry.queue || 0, gate: !!st.entry.gate, gateMode: st.gateMode,\n    entries: st.entry.in || 0, checkouts: st.entry.checkout || 0, conversion: st.entry.in ? +(st.entry.checkout / st.entry.in).toFixed(3) : 0,\n    temp: st.entry.temp, hum: st.entry.hum, k: +st.k.toFixed(3), threshold: st.threshold,\n    zones: Object.fromEntries(Object.entries(st.zones).map(([zid, z]) => [zid, { raw: z.raw || 0, est: z.est, presence: z.presence ?? null, online: z.online }])),\n    nodes: Object.fromEntries(NODES.map(nid => { const n = st.nodes[nid] || {}; return [nid, { online: !!n.last && now - n.last < 15000, rssi: n.rssi ?? null }]; }))\n  } };\n}\nreturn [state, alerts.length ? alerts : null, cmds.length ? cmds : null];\n",
     "outputs": 3,
     "timeout": 0,
     "noerr": 0,
@@ -421,6 +421,171 @@
     ]
   },
   {
+    "id": "i_day",
+    "type": "inject",
+    "z": "sga_tab",
+    "name": "每分鐘",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "60",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "8",
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 580,
+    "wires": [
+      [
+        "f_day"
+      ]
+    ]
+  },
+  {
+    "id": "i_hload",
+    "type": "inject",
+    "z": "sga_tab",
+    "name": "部署時讀取歷史",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "2",
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 170,
+    "y": 580,
+    "wires": [
+      [
+        "r_hist"
+      ]
+    ]
+  },
+  {
+    "id": "r_hist",
+    "type": "file in",
+    "z": "sga_tab",
+    "name": "storega-history.json",
+    "filename": "storega-history.json",
+    "filenameType": "str",
+    "format": "utf8",
+    "chunk": false,
+    "sendError": false,
+    "encoding": "utf8",
+    "allProps": false,
+    "x": 410,
+    "y": 580,
+    "wires": [
+      [
+        "f_hparse"
+      ]
+    ]
+  },
+  {
+    "id": "c_hist",
+    "type": "catch",
+    "z": "sga_tab",
+    "name": "第一次還沒有檔案",
+    "scope": [
+      "r_hist"
+    ],
+    "uncaught": false,
+    "x": 410,
+    "y": 620,
+    "wires": [
+      [
+        "f_hparse"
+      ]
+    ]
+  },
+  {
+    "id": "f_hparse",
+    "type": "function",
+    "z": "sga_tab",
+    "name": "解析歷史",
+    "func": "let h=[];try{if(!msg.error)h=JSON.parse(msg.payload)}catch(e){node.warn('storega-history.json 無法解析，從空的開始')}\nreturn {history:Array.isArray(h)?h:[]};",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 620,
+    "y": 580,
+    "wires": [
+      [
+        "f_day"
+      ]
+    ]
+  },
+  {
+    "id": "f_day",
+    "type": "function",
+    "z": "sga_tab",
+    "name": "每日紀錄與歷史",
+    "func": "// 每日紀錄（每分鐘）：把今天的逐時進場與每 5 分鐘場內人數記在 Node-RED，換日時封存成一天的摘要\n// 歷史（最多 30 天）存在 storega-history.json，並以 retain 發到 sga/system/history，任何一台電腦打開儀表板都看得到\n// msg.history（部署時從檔案讀進來）會先載入\n// 輸出 1 → sga/system/history（retain）  輸出 2 → 寫檔 storega-history.json\nconst pad = n => String(n).padStart(2, '0');\nconst dayKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;\nlet hist = flow.get('sgaHistory') || [];\nif (Array.isArray(msg.history)) {  // loaded from the file at deploy\n  hist = msg.history.filter(x => x && x.date).slice(-30);\n  flow.set('sgaHistory', hist);\n  return [{ payload: { days: hist, ts: Date.now() } }, null];\n}\nconst st = flow.get('sga');\nif (!st) return null;\nconst now = msg.now ? new Date(msg.now) : new Date(), today = dayKey(now);\nconst e = st.entry || {}, inn = Number(e.in) || 0, co = Number(e.checkout) || 0;\nlet day = flow.get('sgaDay');\nlet out1 = null, out2 = null;\nif (!day || day.date !== today) {\n  if (day && day.entries > 0) {  // the day just ended: keep its summary\n    const d = new Date(day.date + 'T12:00:00');\n    hist = hist.filter(x => x.date !== day.date).concat([{ date: day.date, label: `${d.getMonth() + 1}/${d.getDate()}`, sub: '週' + '日一二三四五六'[d.getDay()],\n      entries: day.entries, checkouts: day.checkouts, dwell: day.dwell, hourly: day.hourly, occ: day.occ, source: 'node-red' }]).slice(-30);\n    flow.set('sgaHistory', hist);\n    out1 = { payload: { days: hist, ts: Date.now() } };\n    out2 = { payload: JSON.stringify(hist) };\n  }\n  day = { date: today, hourly: Array(12).fill(0), occ: Array(144).fill(null), lastIn: inn, entries: 0, checkouts: 0, dwell: 0 };\n}\n// entries into the hour they happened (a smaller counter means the board reset: start again from it)\nconst delta = inn >= day.lastIn ? inn - day.lastIn : inn;\nday.lastIn = inn;\nconst h = now.getHours();\nif (delta > 0 && h >= 10 && h < 22) day.hourly[h - 10] += delta;\nconst slot = Math.floor(((h - 10) * 60 + now.getMinutes()) / 5);\nif (slot >= 0 && slot < 144) day.occ[slot] = Number(e.occupancy) || 0;\nday.entries = inn; day.checkouts = co; day.dwell = e.dwell_avg ? +(e.dwell_avg / 60).toFixed(1) : 0;\nflow.set('sgaDay', day);\nnode.status({ fill: 'green', shape: 'dot', text: `${today} 進場 ${inn} · 歷史 ${hist.length} 天` });\nreturn [out1, out2];\n",
+    "outputs": 2,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 400,
+    "y": 540,
+    "wires": [
+      [
+        "o_hist"
+      ],
+      [
+        "w_hist"
+      ]
+    ]
+  },
+  {
+    "id": "o_hist",
+    "type": "mqtt out",
+    "z": "sga_tab",
+    "name": "sga/system/history",
+    "topic": "sga/system/history",
+    "qos": "1",
+    "retain": "true",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "sga_client",
+    "x": 660,
+    "y": 540,
+    "wires": []
+  },
+  {
+    "id": "w_hist",
+    "type": "file",
+    "z": "sga_tab",
+    "name": "storega-history.json",
+    "filename": "storega-history.json",
+    "filenameType": "str",
+    "appendNewline": false,
+    "createDir": true,
+    "overwriteFile": "true",
+    "encoding": "utf8",
+    "x": 660,
+    "y": 580,
+    "wires": [
+      []
+    ]
+  },
+  {
     "id": "i_cfg",
     "type": "inject",
     "z": "sga_tab",
@@ -438,7 +603,7 @@
     "payload": "",
     "payloadType": "date",
     "x": 170,
-    "y": 560,
+    "y": 640,
     "wires": [
       [
         "f_cfg"
@@ -458,7 +623,7 @@
     "finalize": "",
     "libs": [],
     "x": 400,
-    "y": 540,
+    "y": 620,
     "wires": [
       [
         "o_cmd"

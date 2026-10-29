@@ -31,6 +31,10 @@ function renderSettings(){
   if(!RF.cal){const kv=$('#kv');popNum(kv,S.k.toFixed(2));if(!$('#kn').textContent.startsWith('剛剛'))$('#kn').textContent=S.kAuto?'目前的 k · 每分鐘自動微調':'目前的 k · 手動模式'}
   $('#fKauto').checked=S.kAuto;setSeg($('#srcSeg'),b=>(b.dataset.src==='mqtt')===S.real);
   $('#mqStop').hidden=!S.real||S.conn==='idle';
+  const sk=S.real?[['連線',`${CONN[S.conn]}${S.connErr&&S.conn==='err'?`（${S.connErr}）`:''}`],['登入',store.get('mqttUser','')?`帳號 ${store.get('mqttUser','')}`:'沒有帳號（broker 沒設帳號密碼時才連得上）'],
+      ['規則與告警',nrActive()?'Node-RED 判斷（有收到 sga/system/state）':'儀表板自己判斷（broker 上沒有 Node-RED，例如 npm run demo）'],['歷史',S.nr?.history?`Node-RED 保存 ${S.nr.history.length} 天＋這台電腦`:'這台電腦的瀏覽器']]
+    :[['模式','展示模式：模擬器產生資料，沒有連線']];
+  const sh=sk.map(r=>`<dt>${r[0]}</dt><dd>${esc(r[1])}</dd>`).join('');if($('#srcKv').innerHTML!==sh)$('#srcKv').innerHTML=sh;
   const h=loadHistory(),ld=logDays();
   $('#dataNote').textContent=S.real?'真實模式：今天的數字每 15 秒存進這台電腦的瀏覽器，重新整理或關掉再開都會接續；每天結束後留下一份摘要給「昨天」比較與近 7 天圖表。':'展示模式：資料由模擬器產生，只在記憶體裡，不會保存。真實模式的資料不受影響。';
   const kv=S.real?[['今天',`進場 ${S.today.entries} · 結帳 ${S.today.checkouts}${S.savedAt?` · 最後保存 ${hhmmss(S.t-(performance.now()-S.savedAt)/1000)}`:''}`],['過去的天數',h.length?`${h.length} 天（${h[0].date} 起）`:'還沒有，今天結束後會有第一天'],['日誌',`${ld.length||0} 天 · 今天 ${S.logs.length} 筆`]]
@@ -44,7 +48,9 @@ function pfFill(){const p=profile();PF.forEach(([k,sel])=>$(sel).value=p[k]||'')
 function pfDirty(){const p=profile(),n=PF.filter(([k,sel])=>$(sel).value.trim()!==(p[k]||'')).length,s=$('#pfSaved');
   s.classList.toggle('clean',!n);s.lastChild.textContent=n?`有 ${n} 項未儲存的變更`:'所有變更都已儲存';$('#pfSave').disabled=!n||!$('#pfStore').value.trim()||!$('#pfName').value.trim();$('#pfReset').disabled=!n;return n}
 function setSettingsSub(s){setSub=s||'rules';$$('#subnav a').forEach(a=>a.toggleAttribute('aria-current',a.dataset.s===setSub));if($('#subnav [aria-current]'))$('#subnav [aria-current]').setAttribute('aria-current','page');
-  $$('.spanel').forEach(p=>p.hidden=p.dataset.s!==setSub);requestAnimationFrame(placeAll);if(setSub==='rules')rulesFill();if(setSub==='store')pfFill();renderSettings()}
+  $$('.spanel').forEach(p=>p.hidden=p.dataset.s!==setSub);requestAnimationFrame(placeAll);if(setSub==='rules')rulesFill();if(setSub==='store')pfFill();
+  if(setSub==='source'){$('#mqUrl').value=suggestUrl();$('#mqUser').value=store.get('mqttUser','');$('#mqPass').value=store.get('mqttPass','')}  // the chooser may have changed them
+  renderSettings()}
 function initSettings(){
   $$('[data-step]').forEach(b=>b.onclick=()=>{const o=$('#fCap'),v=clamp(+o.textContent+ +b.dataset.step,10,80);popNum(o,v);o.textContent=v;$('#fCap80').textContent=Math.round(v*.8);rulesDirty()});
   $('#fThr').oninput=()=>{thrUI();rulesDirty()};$('#fGate').addEventListener('pick',()=>{gateHelp();rulesDirty()});$('#fWhite').onchange=rulesDirty;
@@ -63,7 +69,8 @@ function initSettings(){
   $('#mqStop').onclick=()=>{mqttDisconnect();slog('conn','info','手動中斷連線','');$('#mqState').innerHTML='';renderShell();renderSettings();toast('info','已中斷與 Node-RED 的連線','仍在真實模式，畫面不會出現模擬資料。',{label:'重新連線',fn:()=>useReal($('#mqUrl').value.trim())})};
   $('#mqUrl').oninput=e=>{const ok=/^wss?:\/\/[^\s/:]+(:\d{2,5})?\/?$/.test(e.target.value.trim()),h=$('#mqHelp');$('#mqBox').classList.toggle('err',!ok);h.className='help'+(ok?'':' err');h.textContent=ok?'格式正確。':'需要以 ws:// 或 wss:// 開頭，例如 ws://192.168.50.10:8080'};
   $('#mqUrl').onkeydown=e=>{if(e.key==='Enter')$('#mqGo').click()};
-  $('#mqGo').onclick=()=>{const v=$('#mqUrl').value.trim();if(!/^wss?:\/\/[^\s/:]+(:\d{2,5})?\/?$/.test(v)){mqStatus('err','');return}useReal(v)};
+  $('#mqUser').value=store.get('mqttUser','');$('#mqPass').value=store.get('mqttPass','');
+  $('#mqGo').onclick=()=>{const v=$('#mqUrl').value.trim();if(!/^wss?:\/\/[^\s/:]+(:\d{2,5})?\/?$/.test(v)){mqStatus('err','');return}useReal(v,$('#mqUser').value.trim(),$('#mqPass').value)};
   $$('[data-nt]').forEach(i=>{i.checked=!!S.notify[i.dataset.nt];i.onchange=()=>{S.notify[i.dataset.nt]=i.checked;persist()}});
   $('#themeSeg').addEventListener('pick',e=>setTheme(e.detail.dataset.t));
   $('#fMini').checked=store.get('mini',false);$('#fMini').onchange=e=>setMini(e.target.checked);
@@ -72,6 +79,12 @@ function initSettings(){
   $('#delIn').onkeydown=e=>{if(e.key!=='Enter')return;if($('#delGo').disabled){const f=$('#delIn').parentElement;f.classList.add('err');f.classList.remove('shake');void f.offsetWidth;f.classList.add('shake');setTimeout(()=>f.classList.remove('err'),1200)}else $('#delGo').click()};
   $('#delCancel').onclick=()=>$('#delScrim').hidden=true;$('#delScrim').addEventListener('click',e=>{if(e.target.id==='delScrim')$('#delScrim').hidden=true});
   $('#delGo').onclick=()=>{$('#delScrim').hidden=true;resetToday()};
+  $('#occFixGo').onclick=()=>{const v=+$('#occFix').value,box=$('#occFix').parentElement;
+    if(!Number.isInteger(v)||v<0||v>S.today.entries){box.classList.add('err');box.classList.remove('shake');void box.offsetWidth;box.classList.add('shake');setTimeout(()=>box.classList.remove('err'),1200);toast('warn','人數不對',`要是 0 到今天進場數 ${S.today.entries} 之間的整數。`);return}
+    const was=occ();slog('op','warn',`校正場內人數 ${was} → ${v}`,'現場人工清點');
+    if(S.real)mqttCmd('entry-01',{action:'set_occupancy',value:v});
+    else{const drop=S.agents.length-v;if(drop>0){S.agents.splice(0,drop);S.today.exits+=drop}mqttCmd('entry-01',{action:'set_occupancy',value:v});toast('ok','已校正場內人數',`${was} → ${occ()} 人（展示模式只能往下修）`)}
+    $('#occFix').value=''};
   PF.forEach(([,sel])=>$(sel).oninput=pfDirty);$('#pfReset').onclick=pfFill;
   $('#storeForm').onsubmit=e=>{e.preventDefault();if($('#pfSave').disabled)return;const p={};PF.forEach(([k,sel])=>p[k]=$(sel).value.trim());const before=profile();store.set('profile',p);applyProfile();pfDirty();
     slog('op','info','更新門市資訊',PF.filter(([k])=>before[k]!==p[k]).map(([k])=>`${k}: ${before[k]||'—'} → ${p[k]||'—'}`).join('，'));
@@ -80,15 +93,15 @@ function initSettings(){
 }
 
 /* ---------- 韌體設定：fill a form, get the config.h the Arduino sketch needs ---------- */
-const FW=Object.assign({node:'entry-01',host:'',ssid:'',salt:'',rssi:-75,radar:true,staff:[]},store.get('fw',{}));
+const FW=Object.assign({node:'entry-01',host:'',ssid:'',salt:'',rssi:-75,radar:true,staff:[],mqUser:'',ota:''},store.get('fw',{}));
 const randSalt=()=>'sga-'+[...crypto.getRandomValues(new Uint8Array(6))].map(b=>b.toString(16).padStart(2,'0')).join('');
 const cstr=v=>'"'+String(v).replace(/\\/g,'\\\\').replace(/"/g,'\\"')+'"';
 function fwText(){const zone=FW.node!=='entry-01',pass=$('#fwPass').value;
   const head=`// StoreGA ${FW.node} · 由儀表板「設定 → 韌體設定」產生 · ${new Date().toLocaleString('zh-TW',{hour12:false})}\n// 放在 firmware/${zone?'zone_node':'entry_node'}/config.h（這個檔案不會進 git）\n#pragma once\n\n`;
-  const net=`#define WIFI_SSID      ${cstr(FW.ssid||'your-wifi')}\n#define WIFI_PASSWORD  ${cstr(pass||'your-password')}\n#define MQTT_HOST      ${cstr(FW.host||'192.168.50.10')}\n#define MQTT_PORT      1883\n#define NODE_ID        ${cstr(FW.node)}\n`;
-  if(!zone)return head+net+`#define FW_VERSION     "1.4.2"\n\n// 接腳（ESP32 DevKit V1），接線圖見 firmware/README.md\n#define PIN_IR_A       32\n#define PIN_IR_B       33\n#define PIN_RFID_SS    5\n#define PIN_RFID_RST   27\n#define PIN_TM_CLK     22\n#define PIN_TM_DIO     21\n#define PIN_LED        4\n#define LED_COUNT      14\n#define PIN_SERVO      13\n#define PIN_DHT        15\n#define PIN_BUTTON     26\n#define PIN_BUZZER     25\n\n#define SERVO_OPEN_DEG    90\n#define SERVO_CLOSED_DEG  0\n#define DEFAULT_CAPACITY  ${S.capacity}\n#define TZ_OFFSET_SEC     (8 * 3600)\n`;
+  const net=`#define WIFI_SSID      ${cstr(FW.ssid||'your-wifi')}\n#define WIFI_PASSWORD  ${cstr(pass||'your-password')}\n#define MQTT_HOST      ${cstr(FW.host||'192.168.50.10')}\n#define MQTT_PORT      1883\n#define MQTT_USER      ${cstr(FW.mqUser)}\n#define MQTT_PASS      ${cstr($('#fwMqPass').value)}\n${FW.ota?`#define OTA_PASSWORD   ${cstr(FW.ota)}\n`:'// 沒有 OTA_PASSWORD：不開無線更新\n'}#define NODE_ID        ${cstr(FW.node)}\n`;
+  if(!zone)return head+net+`#define FW_VERSION     "1.5.0"\n\n// 接腳（ESP32 DevKit V1），接線圖見 firmware/README.md\n#define PIN_IR_A       32\n#define PIN_IR_B       33\n#define PIN_RFID_SS    5\n#define PIN_RFID_RST   27\n#define PIN_TM_CLK     22\n#define PIN_TM_DIO     21\n#define PIN_LED        4\n#define LED_COUNT      14\n#define PIN_SERVO      13\n#define PIN_DHT        15\n#define PIN_BUTTON     26\n#define PIN_BUZZER     25\n\n#define SERVO_OPEN_DEG    90\n#define SERVO_CLOSED_DEG  0\n#define DEFAULT_CAPACITY  ${S.capacity}\n#define TZ_OFFSET_SEC     (8 * 3600)\n#define CLOSE_HOUR        22\n`;
   const staff=FW.staff.length?FW.staff.map(h=>cstr(h)).join(', '):'"0000000000000000"';
-  return head+net+`#define FW_VERSION     "1.3.8"\n#define HAS_RADAR      ${FW.radar?1:0}\n\n// Wi-Fi 監聽\n#define HASH_SALT      ${cstr(FW.salt)}\n#define MIN_RSSI       (${FW.rssi})\n#define WINDOW_MS      60000\n#define STAFF_HASHES   { ${staff} }\n\n// 接腳\n#define PIN_RADAR_RX   16\n#define PIN_RADAR_TX   17\n#define PIN_RADAR_OUT  27\n#define PIN_STATUS_LED 2\n`}
+  return head+net+`#define FW_VERSION     "1.4.0"\n#define HAS_RADAR      ${FW.radar?1:0}\n\n// Wi-Fi 監聽\n#define HASH_SALT      ${cstr(FW.salt)}\n#define MIN_RSSI       (${FW.rssi})\n#define WINDOW_MS      60000\n#define STAFF_HASHES   { ${staff} }\n\n// 接腳\n#define PIN_RADAR_RX   16\n#define PIN_RADAR_TX   17\n#define PIN_RADAR_OUT  27\n#define PIN_STATUS_LED 2\n`}
 function fwHighlight(t){return esc(t).split('\n').map(l=>l.startsWith('//')?`<span class="c">${l}</span>`:l.replace(/^(#define|#pragma)/,'<span class="k">$1</span>').replace(/(&quot;.*?&quot;)/g,'<span class="s">$1</span>').replace(/(\s)(\(?-?\d[\d*\s()]*\)?)$/,'$1<span class="n">$2</span>')).join('\n')}
 function renderFw(){const zone=FW.node!=='entry-01';$('[data-s="firmware"]').classList.toggle('entry-mode',!zone);
   $('#fwFile').textContent=`${zone?'zone_node':'entry_node'}/config.h`;$('#fwCode').innerHTML=fwHighlight(fwText());
@@ -102,6 +115,7 @@ function initFirmware(){
   $('#fwHost').oninput=e=>{FW.host=e.target.value.trim();const ok=/^(\d{1,3}(\.\d{1,3}){3}|[a-z0-9.-]+)$/i.test(FW.host)&&FW.host.split('.').every(p=>!/^\d+$/.test(p)||+p<256);
     $('#fwHostBox').classList.toggle('err',!ok&&!!FW.host);$('#fwHostH').className='help'+(ok||!FW.host?'':' err');$('#fwHostH').textContent=ok||!FW.host?'ESP32 會連到這台電腦的 1883 埠。':'看起來不像 IP，例如 192.168.50.10';renderFw()};
   $('#fwSsid').oninput=e=>{FW.ssid=e.target.value;renderFw()};$('#fwPass').oninput=renderFw;
+  $('#fwMqUser').value=FW.mqUser;$('#fwOta').value=FW.ota;$('#fwMqUser').oninput=e=>{FW.mqUser=e.target.value.trim();renderFw()};$('#fwMqPass').oninput=renderFw;$('#fwOta').oninput=e=>{FW.ota=e.target.value;renderFw()};
   $('#fwEye').onclick=()=>{const p=$('#fwPass');p.type=p.type==='password'?'text':'password';$('#fwEye').setAttribute('aria-label',p.type==='password'?'顯示密碼':'隱藏密碼')};
   $('#fwSalt').oninput=e=>{FW.salt=e.target.value.trim();renderFw()};$('#fwSaltNew').onclick=()=>{FW.salt=randSalt();$('#fwSalt').value=FW.salt;renderFw();toast('info','已產生新的鹽','四顆分區節點要重新燒錄同一組，舊的雜湊白名單也要重新讀取。')};
   $('#fwRssi').oninput=e=>{FW.rssi=+e.target.value;renderFw()};$('#fwRadar').onchange=e=>{FW.radar=e.target.checked;renderFw()};

@@ -6,12 +6,13 @@ function rebootNode(id){const n=S.nodes[id],now=performance.now();n.confirmUntil
 function blinkNode(id){const n=S.nodes[id];n.blinkUntil=performance.now()+4000;mqttCmd(id,{action:'blink',seconds:4})}
 function dStats(){const list=NODE_DEFS.map(d=>S.nodes[d.id]),on=list.filter(n=>n.online),sig=on.filter(n=>n.rssi!=null),avg=sig.length?Math.round(sig.reduce((a,n)=>a+n.rssi,0)/sig.length):null;
   const msgs=(S.msgCount||0).toLocaleString(),host=(()=>{try{return new URL((S.url||'').replace(/^ws/,'http')).host}catch{return''}})();
-  const it=[['cpu','在線節點',`${on.length}<small>/ 5</small>`,on.length===5?'全部正常':S.real&&!list.some(n=>n.seen)?'還沒有節點回報':`${5-on.length} 個離線`],['wifi','平均訊號',avg==null?'—':`${avg}<small>dBm</small>`,avg==null?'沒有在線的節點':avg>-65?'良好':'偏弱，考慮調整位置'],['plug','MQTT Broker',S.real?CONN[S.conn]:'模擬',S.real?(host||'Node-RED · Aedes'):'展示模式，沒有連線'],['wave',S.real?'今日訊息':'本次訊息',msgs,S.real?'收到與送出的 MQTT 訊息':'模擬器產生的訊息']];
+  const qs=list.map(linkQ).filter(Boolean),tot=qs.reduce((a,q)=>a+q.recv+q.lost,0),lat=list.flatMap(n=>n.q?.lat||[]).sort((a,b)=>a-b),qa=qs.length?{loss:qs.reduce((a,q)=>a+q.lost,0)/Math.max(1,tot),p50:lat.length?lat[lat.length>>1]:null}:null;
+  const it=[['cpu','在線節點',`${on.length}<small>/ 5</small>`,on.length===5?'全部正常':S.real&&!list.some(n=>n.seen)?'還沒有節點回報':`${5-on.length} 個離線`],['wifi','平均訊號',avg==null?'—':`${avg}<small>dBm</small>`,avg==null?'沒有在線的節點':avg>-65?'良好':'偏弱，考慮調整位置'],['plug','MQTT Broker',S.real?CONN[S.conn]:'模擬',S.real?(host||'Node-RED · Aedes'):'展示模式，沒有連線'],['wave','連線品質',qa?`${(qa.loss*100).toFixed(qa.loss&&qa.loss<.01?2:1)}<small>% 遺失</small>`:'—',qa?`延遲中位 ${qa.p50??'—'} ms · 共 ${msgs} 則`:S.real?'收到有序號的訊息後計算':`共 ${msgs} 則`]];
   const box=$('#dStats');if(!box.children.length)box.innerHTML=it.map(i=>`<div class="stat"><span class="label">${icon(i[0],14)}${i[1]}</span><b></b><p></p></div>`).join('');
   [...box.children].forEach((c,k)=>{const b=c.querySelector('b');if(b.innerHTML!==it[k][2])b.innerHTML=it[k][2];c.querySelector('p').textContent=it[k][3]})}
 function renderDevices(){
   dStats();const now=performance.now(),q=DV.q.toLowerCase();let shown=0;
-  if(!$('#dBody').children.length)$('#dBody').innerHTML=NODE_DEFS.map(d=>`<tr data-node="${d.id}" tabindex="0" aria-selected="false"><td><div class="nid">${d.id}</div><div class="nrole">${d.role}</div></td><td class="st"></td><td><span class="sigc"></span></td><td><svg class="rh" viewBox="0 0 200 40" preserveAspectRatio="none"></svg></td><td class="m ip"></td><td class="m up"></td><td class="m ls"></td></tr>`).join('');
+  if(!$('#dBody').children.length)$('#dBody').innerHTML=NODE_DEFS.map(d=>`<tr data-node="${d.id}" tabindex="0" aria-selected="false"><td><div class="nid">${d.id}</div><div class="nrole">${d.role}</div></td><td class="st"></td><td><span class="sigc"></span></td><td><svg class="rh" viewBox="0 0 200 40" preserveAspectRatio="none"></svg></td><td class="m lat"></td><td class="m loss"></td><td class="m ip"></td><td class="m ls"></td></tr>`).join('');
   for(const d of NODE_DEFS){const n=S.nodes[d.id],tr=$(`#dBody tr[data-node="${d.id}"]`),reb=n.rebootUntil>now;
     const vis=(DV.f==='all'||(DV.f==='on')===n.online)&&(!q||(d.id+n.ip+d.parts+d.role).toLowerCase().includes(q));tr.hidden=!vis;if(vis)shown++;
     tr.setAttribute('aria-selected',DV.sel===d.id);
@@ -19,7 +20,8 @@ function renderDevices(){
     tr.querySelector('.st').innerHTML=`<span class="chip ${st[0]}"><i></i>${st[1]}</span>`;
     tr.querySelector('.sigc').innerHTML=sigBars(n.rssi,n.online&&n.rssi!=null)+(n.online&&n.rssi!=null?`${n.rssi} dBm`:'—');
     spark(tr.querySelector('.rh'),n.rssiHist.length>1?n.rssiHist.map(v=>v==null?null:v+100):[],{min:10,max:60,color:n.online?'var(--ink-3)':'var(--crit)',fmt:v=>v,label:()=>''});
-    tr.querySelector('.ip').textContent=n.ip||'—';tr.querySelector('.up').textContent=n.online&&n.boot!=null?dur(S.t-n.boot):'—';
+    const lq=linkQ(n);tr.querySelector('.lat').textContent=lq&&lq.p50!=null?`${lq.p50} ms`:'—';const ls=tr.querySelector('.loss');ls.textContent=lq?`${(lq.loss*100).toFixed(lq.loss&&lq.loss<.01?2:1)}%`:'—';ls.classList.toggle('bad',!!lq&&lq.loss>.02);
+    tr.querySelector('.ip').textContent=n.ip||'—';
     const ago=S.t-n.lastSeen;tr.querySelector('.ls').textContent=!n.seen?'從未':ago<3?'剛剛':ago<120?`${Math.round(ago)} 秒前`:`${Math.round(ago/60)} 分鐘前`}
   $('#dEmpty').hidden=shown>0;renderDrawer();renderConsole();
 }
@@ -35,7 +37,9 @@ function renderDrawer(){const d=NODE_DEFS.find(x=>x.id===DV.sel),n=S.nodes[d.id]
     $('#drReb').onclick=()=>{const b=$('#drReb');if(!DV.confirm||DV.confirm<performance.now()){DV.confirm=performance.now()+3000;b.classList.add('confirm');morph($('#drRebL'),'確認重開？');setTimeout(()=>{if(DV.confirm<=performance.now()){b.classList.remove('confirm');morph($('#drRebL'),'重新開機')}},3050);return}
       DV.confirm=0;b.classList.remove('confirm');morph($('#drRebL'),'重開中…');rebootNode(d.id);toast('info',`已送出重開指令給 ${d.id}`,'約 4 秒後重新連線。');setTimeout(()=>morph($('#drRebL'),'重新開機'),4200)}}
   const c=$('#drChip');c.className='chip '+(reb?'warn':n.online?'ok':n.seen?'crit':'');c.innerHTML=`<i></i>${reb?'重開中':n.online?'在線':n.seen?'離線':'尚未回報'}`;
-  $('#drKv').innerHTML=[['IP 位址',n.ip||'—'],['韌體',n.fw?`v${n.fw}`:'—'],['運行時間',n.online&&n.boot!=null?dur(S.t-n.boot):'—'],['最後回報',n.seen?hhmmss(n.lastSeen):'還沒收到'],['訊號',n.online&&n.rssi!=null?`${n.rssi} dBm`:'—']].map(r=>`<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('');
+  const lq=linkQ(n),lc=n.lastCmd;$('#drKv').innerHTML=[['IP 位址',n.ip||'—'],['韌體',n.fw?`v${n.fw}`:'—'],['運行時間',n.online&&n.boot!=null?dur(S.t-n.boot):'—'],['最後回報',n.seen?hhmmss(n.lastSeen):'還沒收到'],['訊號',n.online&&n.rssi!=null?`${n.rssi} dBm`:'—'],
+    ['延遲（中位／95%）',lq&&lq.p50!=null?`${lq.p50} / ${lq.p95} ms`:'—'],['遺失',lq?`${lq.lost} / ${lq.recv+lq.lost} 則（${(lq.loss*100).toFixed(1)}%）`:'—'],['上次重開原因',n.reset?RESET[n.reset]||n.reset:'—'],
+    ['最近指令',lc?`${CMDNAME[lc.action]||lc.action} · ${lc.ok===null?'沒有回覆':lc.ok?`已確認 ${lc.ms} ms`:`被拒絕：${lc.reason}`}`:'—']].map(r=>`<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('');
   const h=n.rssiHist.length?n.rssiHist:[n.rssi];
   chart($('#drChart'),{type:'line',h:140,x:h.map((_,i)=>i===h.length-1?'現在':`${h.length-1-i} 分前`),every:Math.max(1,Math.ceil(h.length/4)),yMax:100,yFmt:v=>`${Math.round(v-100)}`,tipX:i=>i===h.length-1?'現在':`${h.length-1-i} 分鐘前`,
     series:[{name:'訊號',color:n.online?PAL.ink:PAL.crit,area:true,values:h.map(v=>v==null?null:v+100),fmt:v=>`${Math.round(v-100)} dBm`}]});

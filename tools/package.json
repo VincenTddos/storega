@@ -7,7 +7,8 @@
     "nodes": "node fake-nodes.js",
     "demo": "node demo.js",
     "connect": "node connect-node-red.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "security-check": "node security-check.js"
   },
   "engines": {
     "node": ">=18"

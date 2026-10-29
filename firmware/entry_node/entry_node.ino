@@ -21,11 +21,13 @@
 #include <time.h>
 #include "config.h"
 #include "storega_core.h"
+#include "storega_net.h"
 
 using namespace sga;
 
 WiFiClient net;
 PubSubClient mqtt(net);
+Link link(mqtt);
 Preferences prefs;
 MFRC522 rfid(PIN_RFID_SS, PIN_RFID_RST);
 TM1637Display tm(PIN_TM_CLK, PIN_TM_DIO);
@@ -40,12 +42,16 @@ CheckoutDebounce tap;
 float temp = NAN, hum = NAN;
 bool lastGateOpen = true, dirty = true;
 uint32_t blinkUntil = 0, lastCounter = 0, lastStatus = 0, lastDht = 0, lastMqttTry = 0, lastSave = 0, buttonDown = 0;
-int lastDay = -1;
+int lastDay = -1, zeroDay = -1;
+#ifndef CLOSE_HOUR
+#define CLOSE_HOUR 22
+#endif
 
 const char* T_COUNTER = "sga/" NODE_ID "/counter";
 const char* T_STATUS  = "sga/" NODE_ID "/status";
 const char* T_EVENT   = "sga/" NODE_ID "/event";
 const char* T_CMD     = "sga/" NODE_ID "/cmd";
+const char* T_ACK     = "sga/" NODE_ID "/ack";
 
 /* ---------- persistence: today's counters survive a reboot or power cut ---------- */
 void saveState() {
@@ -93,39 +99,50 @@ void driveGate() {
 
 /* ---------- MQTT ---------- */
 void publishCounter() {
-  char j[320]; counterJson(j, sizeof j, store, temp, hum, dwell.averageSec(store.in));
-  mqtt.publish(T_COUNTER, j); lastCounter = millis(); dirty = false;
+  char j[360]; counterJson(j, sizeof j, store, temp, hum, dwell.averageSec(store.in));
+  link.publish(T_COUNTER, j, sizeof j); lastCounter = millis(); dirty = false;
 }
 void publishStatus() {
-  char j[200]; statusJson(j, sizeof j, WiFi.RSSI(), WiFi.localIP().toString().c_str(), FW_VERSION, millis() / 1000, ESP.getFreeHeap());
-  mqtt.publish(T_STATUS, j); lastStatus = millis();
+  char j[256]; statusJson(j, sizeof j, WiFi.RSSI(), WiFi.localIP().toString().c_str(), FW_VERSION, millis() / 1000, ESP.getFreeHeap(), resetReason());
+  link.publish(T_STATUS, j, sizeof j); lastStatus = millis();
 }
 void onMessage(char* topic, byte* payload, unsigned int len) {
   JsonDocument doc;
   if (deserializeJson(doc, payload, len)) return;
   const char* action = doc["action"] | "";
-  if (!strcmp(action, "gate")) { GateMode m; if (parseGateMode(doc["mode"] | "", m)) { store.mode = m; driveGate(); } }
-  else if (!strcmp(action, "capacity")) store.setCapacity(doc["value"] | 0);
+  const char* id = doc["id"] | "";
+  bool ok = true; const char* why = "";
+  if (!strcmp(action, "gate")) { GateMode m; if (parseGateMode(doc["mode"] | "", m)) { store.mode = m; driveGate(); } else { ok = false; why = "mode must be auto/open/closed"; } }
+  else if (!strcmp(action, "capacity")) { ok = store.setCapacity(doc["value"] | 0); if (!ok) why = "capacity must be 10-80"; }
+  else if (!strcmp(action, "set_occupancy")) { ok = store.setOccupancy(doc["value"] | -1); if (!ok) why = "must be 0..today's entries"; }
   else if (!strcmp(action, "blink")) blinkUntil = millis() + (uint32_t)(doc["seconds"] | 4) * 1000;
-  else if (!strcmp(action, "reboot")) { saveState(); delay(200); ESP.restart(); }
+  else if (!strcmp(action, "reboot")) { saveState(); link.ack(T_ACK, id, action, true); mqtt.loop(); delay(300); ESP.restart(); }
   else if (!strcmp(action, "reset_day")) { store.resetDay(); dwell.reset(); }
+  else if (!strcmp(action, "threshold") || !strcmp(action, "calibrate")) return;  // Node-RED's business, not the board's
+  else { ok = false; why = "unknown action"; }
+  link.ack(T_ACK, id, action, ok, why);
   saveState(); dirty = true;  // echo the new mode/capacity so the dashboard shows what the board really uses
 }
 void ensureMqtt() {
   if (mqtt.connected() || WiFi.status() != WL_CONNECTED || millis() - lastMqttTry < 3000) return;
   lastMqttTry = millis();
   // last will: the broker announces we are gone if power or Wi-Fi drops
-  if (mqtt.connect("esp32-" NODE_ID, T_STATUS, 1, false, "{\"online\":false}")) {
+  if (link.connect("esp32-" NODE_ID, T_STATUS)) {
     mqtt.subscribe(T_CMD, 1);
     publishStatus(); publishCounter();
   }
 }
 
-/* ---------- midnight reset (needs NTP) ---------- */
+/* ---------- midnight reset and closing-time correction (both need NTP) ---------- */
 void checkNewDay() {
   struct tm t; if (!getLocalTime(&t, 10)) return;
   if (lastDay != -1 && t.tm_yday != lastDay) { store.resetDay(); dwell.reset(); dirty = true; }
   if (t.tm_yday != lastDay) { lastDay = t.tm_yday; saveState(); }
+  // 30 minutes after closing the shop is empty: whatever the beams missed today is written off here, and reported
+  if (t.tm_hour * 60 + t.tm_min >= CLOSE_HOUR * 60 + 30 && zeroDay != t.tm_yday) {
+    zeroDay = t.tm_yday; int was = store.occupancy();
+    if (was > 0 && store.setOccupancy(0)) { char j[96]; snprintf(j, sizeof j, "{\"type\":\"auto_zero\",\"was\":%d}", was); if (mqtt.connected()) link.publish(T_EVENT, j, sizeof j); saveState(); dirty = true; }
+  }
 }
 
 void setup() {
@@ -138,10 +155,12 @@ void setup() {
   WiFi.mode(WIFI_STA); WiFi.setAutoReconnect(true); WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   configTime(TZ_OFFSET_SEC, 0, "pool.ntp.org", "time.stdtime.gov.tw");
   mqtt.setServer(MQTT_HOST, MQTT_PORT); mqtt.setBufferSize(512); mqtt.setCallback(onMessage);
-  Serial.printf("StoreGA %s v%s  場內 %d / %d\n", NODE_ID, FW_VERSION, store.occupancy(), store.capacity);
+  startWatchdog();
+  Serial.printf("StoreGA %s v%s  場內 %d / %d  （上次重開：%s）\n", NODE_ID, FW_VERSION, store.occupancy(), store.capacity, resetReason());
 }
 
 void loop() {
+  feedWatchdog();
   uint32_t now = millis();
   // beams read LOW when broken
   DoorEvent ev = door.update(digitalRead(PIN_IR_A) == LOW, digitalRead(PIN_IR_B) == LOW, now);
@@ -154,12 +173,12 @@ void loop() {
   }
   // calibration button: hold 1 s, Node-RED recalculates k against the door count
   if (digitalRead(PIN_BUTTON) == LOW) { if (!buttonDown) buttonDown = now; }
-  else if (buttonDown) { if (now - buttonDown > 1000 && mqtt.connected()) mqtt.publish(T_EVENT, "{\"type\":\"button\",\"action\":\"calibrate\"}"); buttonDown = 0; }
+  else if (buttonDown) { if (now - buttonDown > 1000 && mqtt.connected()) { char j[96] = "{\"type\":\"button\",\"action\":\"calibrate\"}"; link.publish(T_EVENT, j, sizeof j); } buttonDown = 0; }
 
   if (now - lastDht > 5000) { lastDht = now; float t = dht.readTemperature(), h = dht.readHumidity(); if (!isnan(t)) temp = t; if (!isnan(h)) hum = h; checkNewDay(); }
 
   driveGate(); drawDisplay(now); drawStrip(now);
-  ensureMqtt(); mqtt.loop();
+  ensureMqtt(); mqtt.loop(); handleOta("storega-" NODE_ID, saveState);
   if (mqtt.connected()) {
     if (dirty && now - lastCounter > 250) publishCounter();   // changes go out at once (rate-limited)
     else if (now - lastCounter > 2000) publishCounter();      // otherwise every 2 s

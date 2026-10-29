@@ -9,6 +9,7 @@
 | **心跳檢查** | 每 5 秒；節點超過 15 秒沒訊息 → 嚴重告警；恢復時再發一次 |
 | **自動校正 k** | 每分鐘 `k = 0.7k + 0.3 × 入口人數 ÷ Wi-Fi 總數`；「立即校正」按鈕直接採用並通知入口節點 |
 | **整點紀錄** | 10:00–22:00 每小時整點附加一行到 `storega-log.csv` |
+| **每日紀錄與歷史** | 每分鐘記下今天的逐時進場與每 5 分鐘場內人數；換日時封存成一天的摘要，存在 `storega-history.json`（最多 30 天），並以 retain 發到 `sga/system/history`，任何一台電腦打開儀表板都拿得到前幾天的資料 |
 | **部署時下發上限** | 部署後 5 秒把人數上限送給 `entry-01` |
 
 告警格式：`{ key, level: "crit"|"warn"|"info", title, detail, ts, source: "node-red" }`。
@@ -20,6 +21,8 @@
 ```bash
 cd tools && npm install && npm run connect
 ```
+
+**建議加上帳號密碼**（不然同一個 Wi-Fi 的人都能發指令開閘門）：`npm run connect -- --mqtt-user storega --mqtt-pass 你的密碼`。它會把這組帳密設到 Aedes 與 Node-RED 自己的 MQTT 連線上；儀表板與每塊板子的 `config.h` 都填同一組。Aedes 節點只支援一組帳號，所以沒有權限區分；需要「板子不能發指令」這種權限時，用 `tools/broker.js`（有角色與 ACL）或 Mosquitto 的 acl 檔。
 
 它會：確認 Node-RED 在 `http://localhost:1880` 執行 → 缺少時自動安裝 `node-red-contrib-aedes`（不用重開）→ 把 StoreGA 加成獨立分頁並部署（不動你其他分頁；原本已有 Aedes 或 1883 被占用時會先問你）→ 用 5 個模擬 ESP32 測試直到收到 `sga/system/state` → 印出儀表板要填的 `ws://…:8080`。重複執行只會更新 StoreGA 分頁。Node-RED 不在本機或不是 1880 埠時加 `-- --url http://IP:埠`。
 

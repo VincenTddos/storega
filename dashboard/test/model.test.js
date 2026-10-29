@@ -93,3 +93,35 @@ test('log: every alert, command and node event is recorded; 真實模式 saves i
   const day=run(c,'S.date');assert.equal(JSON.parse(ls.getItem('storega:log:'+day)).length,L.length);
   assert.deepEqual(JSON.parse(ls.getItem('storega:logDays')),[day]);
 });
+
+test('link quality: gaps in seq are lost messages, a restart is not, ts gives latency',()=>{
+  const c=load(memStorage());run(c,`S=freshState(true);S.t=12*3600;const now=Date.now();
+    for(const s of[1,2,3,6,7])onMqtt('sga/zone-A/wifi',{raw:3,seq:s,ts:now-40});   // 4 and 5 never arrived
+    onMqtt('sga/zone-A/status',{rssi:-60,seq:1,ts:now-40,reset:'watchdog'})`);    // board restarted: seq starts again
+  const q=val(c,'linkQ(S.nodes["zone-A"])');
+  assert.deepEqual([q.recv,q.lost],[6,2]);assert.ok(q.p50>=40&&q.p50<1000,'latency from ts');
+  assert.equal(run(c,'S.nodes["zone-A"].reset'),'watchdog');
+});
+
+test('commands the board carries out get an id and an answer; refusals are logged as errors',()=>{
+  const c=load(memStorage());run(c,`S=freshState(true);S.t=12*3600;S.conn='ok';mqttCmd('entry-01',{action:'gate',mode:'closed'});mqttCmd('entry-01',{action:'threshold',value:10})`);
+  const [gate,thr]=val(c,'S.msgs.slice(0,2).reverse().map(m=>JSON.parse(m.body))');
+  assert.ok(gate.id,'gate is the board\'s job → has an id');assert.equal(thr.id,undefined,'threshold is Node-RED\'s → no id');
+  run(c,`onMqtt('sga/entry-01/ack',{id:'${gate.id}',action:'gate',ok:true,seq:1,ts:Date.now()})`);
+  assert.deepEqual(val(c,'[pendingCmd.size,S.nodes["entry-01"].lastCmd.ok]'),[0,true]);
+  run(c,`mqttCmd('entry-01',{action:'capacity',value:500});const id=[...pendingCmd.keys()][0];onMqtt('sga/entry-01/ack',{id,action:'capacity',ok:false,reason:'capacity must be 10-80'})`);
+  assert.ok(val(c,`S.logs.some(e=>e.lv==='error'&&e.cat==='cmd'&&e.detail==='capacity must be 10-80')`));
+  run(c,'for(const p of pendingCmd.values())clearTimeout(p.timer)');
+});
+
+test('with Node-RED on the broker its alerts and k count, and the dashboard stops judging on its own',()=>{
+  const c=load(memStorage());run(c,`S=freshState(true);S.t=12*3600;S.capacity=10;onMqtt('sga/entry-01/counter',{in:20,out:9,occupancy:11});checkAlerts()`);
+  assert.ok(run(c,`S.alerts.some(a=>a.title.includes('上限'))`),'no Node-RED → the dashboard raises it');
+  run(c,`S.alerts=[];S.alertLast={};onMqtt('sga/system/online',{online:true});onMqtt('sga/system/state',{k:0.48,occupancy:11});checkAlerts()`);
+  assert.deepEqual(val(c,'[nrActive(),S.k,S.alerts.length]'),[true,0.48,0]);
+  run(c,`onMqtt('sga/system/alert',{key:'off-zone-C',level:'crit',title:'zone-C 離線',detail:'超過 15 秒沒有心跳',ts:Date.now(),source:'node-red'})`);
+  assert.deepEqual(val(c,'[S.alerts[0].title,S.alerts[0].target]'),['zone-C 離線',{view:'devices',node:'zone-C'}]);
+  run(c,`onMqtt('sga/system/history',{days:[{date:'2000-01-02',label:'1/2',entries:321,hourly:[1,2,3,4,5,6,7,8,9,10,11,12]}]})`);
+  assert.equal(run(c,'YK().entries'),321,'history kept by Node-RED becomes "the previous day"');
+  run(c,`onMqtt('sga/system/online',{online:false})`);assert.equal(run(c,'nrActive()'),false,'Node-RED gone → the dashboard judges again');
+});

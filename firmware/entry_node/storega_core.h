@@ -105,6 +105,8 @@ struct Store {
   }
   bool setCapacity(int v) { if (v < 10 || v > 80) return false; capacity = (uint16_t)v; return true; }
   void resetDay() { in = out = checkout = 0; queue = 0; }
+  /* staff counted the room and the door count has drifted: keep today's entries, adjust exits so in − out = v */
+  bool setOccupancy(int v) { if (v < 0 || (uint32_t)v > in) return false; out = in - (uint32_t)v; return true; }
 };
 
 /* Average stay without tracking anyone (Little's law): average stay = ∫ occupancy dt ÷ people who came in. */
@@ -234,8 +236,25 @@ inline int counterJson(char* out, size_t n, const Store& s, float temp, float hu
     (unsigned long)s.in, (unsigned long)s.out, s.occupancy(), s.queue, (unsigned long)s.checkout, s.gateOpen() ? "true" : "false", t, h,
     (unsigned long)dwellAvgSec, gateModeName(s.mode), s.capacity);
 }
-inline int statusJson(char* out, size_t n, int rssi, const char* ip, const char* fw, uint32_t uptimeSec, uint32_t heap) {
-  return snprintf(out, n, "{\"rssi\":%d,\"ip\":\"%s\",\"fw\":\"%s\",\"uptime\":%lu,\"heap\":%lu}", rssi, ip, fw, (unsigned long)uptimeSec, (unsigned long)heap);
+inline int statusJson(char* out, size_t n, int rssi, const char* ip, const char* fw, uint32_t uptimeSec, uint32_t heap, const char* reset = "other") {
+  return snprintf(out, n, "{\"rssi\":%d,\"ip\":\"%s\",\"fw\":\"%s\",\"uptime\":%lu,\"heap\":%lu,\"reset\":\"%s\"}", rssi, ip, fw, (unsigned long)uptimeSec, (unsigned long)heap, reset);
+}
+/* Every uplink message ends with ,"seq":n,"ts":ms — seq lets the receiver count lost messages, ts (NTP, ms since 1970;
+   0 before the clock is set) lets it measure latency. Appended in place; returns the new length, or -1 if it does not fit. */
+inline int stampJson(char* buf, size_t n, uint32_t seq, uint64_t tsMs) {
+  size_t len = strlen(buf); if (len < 2 || buf[len - 1] != '}') return -1;
+  char tail[48]; int t = snprintf(tail, sizeof tail, ",\"seq\":%lu,\"ts\":%llu}", (unsigned long)seq, (unsigned long long)tsMs);
+  if (len - 1 + (size_t)t + 1 > n) return -1;
+  memcpy(buf + len - 1, tail, (size_t)t + 1); return (int)(len - 1 + t);
+}
+/* Reply to a command that carried an "id", so the dashboard knows it arrived and whether it was applied. */
+inline int ackJson(char* out, size_t n, const char* id, const char* action, bool ok, const char* reason) {
+  return snprintf(out, n, "{\"id\":\"%.24s\",\"action\":\"%.16s\",\"ok\":%s%s%s%s}", id, action, ok ? "true" : "false",
+    reason && *reason ? ",\"reason\":\"" : "", reason && *reason ? reason : "", reason && *reason ? "\"" : "");
+}
+/* esp_reset_reason() values from ESP-IDF, as words the dashboard can log ("why did zone-B reboot?") */
+inline const char* resetReasonName(int r) {
+  switch (r) { case 1: return "poweron"; case 3: return "software"; case 4: return "panic"; case 5: case 6: case 7: return "watchdog"; case 9: return "brownout"; default: return "other"; }
 }
 inline int radarJson(char* out, size_t n, const RadarReading& r) {
   return snprintf(out, n, "{\"presence\":%s,\"moving\":%s,\"move_cm\":%u,\"still_cm\":%u}", r.presence ? "true" : "false", r.moving ? "true" : "false", r.moveCm, r.stillCm);

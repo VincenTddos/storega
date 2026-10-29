@@ -29,6 +29,12 @@ if (NODES.includes(id)) {
     if (p.action === 'gate' && ['auto', 'open', 'closed'].includes(p.mode)) st.gateMode = p.mode;
     if (p.action === 'calibrate' && p.k > 0) { st.k = Number(p.k); }
     if (p.action === 'threshold' && p.value >= 4 && p.value <= 30) st.threshold = Number(p.value);
+  } else if (kind === 'event' && p.type === 'auto_zero') {
+    // 入口板子在打烊 30 分鐘後把剩下的人數歸零：紅外線今天少算了這麼多人的離場
+    n.last = now;
+    alert('autozero', 'info', '打烊後場內人數歸零', `紅外線今天少算了 ${p.was} 人的離場，已由入口節點修正。`, 0);
+  } else if (kind === 'ack') {
+    n.last = now;  // 指令回覆只代表板子還活著，內容給儀表板看
   } else if (p.online === false) {
     n.last = 0; // MQTT 遺言：板子斷線
   } else {

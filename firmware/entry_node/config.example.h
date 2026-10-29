@@ -5,8 +5,11 @@
 #define WIFI_PASSWORD  "your-password"
 #define MQTT_HOST      "192.168.50.10"   // 跑 Node-RED 的電腦 IP
 #define MQTT_PORT      1883
+#define MQTT_USER      ""                // broker 有設帳號時填（npm run demo 的預設：device / storega-device）
+#define MQTT_PASS      ""
+#define OTA_PASSWORD   "change-me"       // 無線更新韌體的密碼；不需要 OTA 就刪掉這一行
 #define NODE_ID        "entry-01"
-#define FW_VERSION     "1.4.2"
+#define FW_VERSION     "1.5.0"
 
 // 接腳（ESP32 DevKit V1）
 #define PIN_IR_A       32   // 外側紅外線（被遮斷 = LOW）
@@ -26,3 +29,4 @@
 #define SERVO_CLOSED_DEG  0
 #define DEFAULT_CAPACITY  40
 #define TZ_OFFSET_SEC     (8 * 3600)   // 台灣 UTC+8，用來在午夜歸零
+#define CLOSE_HOUR        22           // 打烊時間；之後 30 分鐘若場內還有人數，視為紅外線漏算而歸零並回報

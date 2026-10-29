@@ -5,13 +5,14 @@
         if a broker already exists it asks first
      4. starts the five fake ESP32 nodes for a few seconds and waits for sga/system/state
      5. prints the address to type into the dashboard (設定 → 資料來源)
-   Usage:  cd tools && npm install && npm run connect   [-- --url http://localhost:1880 --yes] */
+   Usage:  cd tools && npm install && npm run connect   [-- --url http://localhost:1880 --yes --mqtt-user storega --mqtt-pass <密碼>]
+   With --mqtt-user/--mqtt-pass the Aedes node gets that login (it supports one shared account), so nobody on the Wi-Fi can publish without it. */
 const fs=require('fs'),path=require('path'),os=require('os'),net=require('net'),readline=require('readline');
 const mqtt=require('mqtt');
 const {startNodes}=require('./fake-nodes');
 
 function arg(name,def){const i=process.argv.indexOf('--'+name);return i>0?process.argv[i+1]:def}
-const NR=(arg('url','http://localhost:1880')).replace(/\/$/,''),YES=process.argv.includes('--yes');
+const NR=(arg('url','http://localhost:1880')).replace(/\/$/,''),YES=process.argv.includes('--yes'),MU=arg('mqtt-user',''),MP=arg('mqtt-pass','');
 const FLOWS=path.join(__dirname,'..','node-red','flows.json');
 const ok=m=>console.log('  ✓ '+m),info=m=>console.log('  · '+m),warn=m=>console.log('  ! '+m),step=m=>console.log('\n▸ '+m);
 const fail=(m,hint)=>{console.log('\n  ✗ '+m);if(hint)console.log('    '+hint.split('\n').join('\n    '));process.exit(1)};
@@ -67,6 +68,8 @@ function lanIPs(){return Object.values(os.networkInterfaces()).flat().filter(i=>
     warn('儀表板要用 WebSocket 連 broker：Mosquitto 需要在 mosquitto.conf 加上 listener 8080 與 protocol websockets。');
   }
   const configs=ours.filter(n=>!n.z&&n.type!=='tab'),members=ours.filter(n=>n.z===tab.id&&(useOurBroker||n.type!=='aedes broker'));
+  // the broker gets the login, and so does Node-RED's own MQTT client that talks to it
+  if(MU&&MP){members.filter(n=>n.type==='aedes broker').forEach(n=>n.credentials={username:MU,password:MP});configs.filter(n=>n.type==='mqtt-broker').forEach(n=>n.credentials={user:MU,password:MP})}
   if(!useOurBroker)members.forEach(n=>{if(n.wires)n.wires=n.wires.map(o=>o.filter(id=>ours.find(x=>x.id===id&&x.type!=='aedes broker')))});
   const body={id:existing||tab.id,label:tab.label,info:tab.info,nodes:members,configs};
   if(existing){await api('PUT','/flow/'+existing,body);ok('已更新原本的「StoreGA」分頁並部署')}
@@ -79,8 +82,9 @@ function lanIPs(){return Object.values(os.networkInterfaces()).flat().filter(i=>
   const wsUp=await portOpen(8080);wsUp?ok('WebSocket 8080 已開啟（儀表板用）'):warn('WebSocket 8080 沒有開啟，儀表板會連不上');
 
   step('用 5 個模擬 ESP32 測試，等 sga/system/state');
-  const fake=startNodes({url:'mqtt://localhost:1883',quiet:true});
-  const sub=mqtt.connect('mqtt://localhost:1883',{clientId:'storega-connect-check'});
+  const login=MU&&MP?{username:MU,password:MP}:{};
+  const fake=startNodes({url:'mqtt://localhost:1883',quiet:true,...login});
+  const sub=mqtt.connect('mqtt://localhost:1883',{clientId:'storega-connect-check',...login});
   const state=await new Promise(res=>{const t=setTimeout(()=>res(null),15000);
     sub.on('connect',()=>sub.subscribe('sga/system/state'));
     sub.on('message',(tp,buf)=>{try{const m=JSON.parse(buf);if(m.nodes&&Object.values(m.nodes).filter(n=>n.online).length>=5){clearTimeout(t);res(m)}}catch{}})});
@@ -89,9 +93,10 @@ function lanIPs(){return Object.values(os.networkInterfaces()).flat().filter(i=>
   ok(`收到整店狀態：場內 ${state.occupancy}/${state.capacity} 人、進場 ${state.entries}、結帳 ${state.checkouts}、k ${state.k}、5/5 節點在線`);
   info('模擬節點已停止；Node-RED 會在 15 秒後把它們標為離線，這是正常的。');
 
-  step('儀表板要填的位址（設定 → 資料來源 → Node-RED（MQTT））');
+  step('儀表板要填的位址（選「真實模式」，或 設定 → 資料來源）');
   console.log('    同一台電腦：  ws://localhost:8080');
   for(const ip of lanIPs())console.log(`    其他電腦／手機：ws://${ip}:8080`);
+  console.log(MU?`    帳號 ${MU} / 你設定的密碼（儀表板與 config.h 的 MQTT_USER／MQTT_PASS 都填這組）`:'    ! broker 沒有設帳號密碼：同一個 Wi-Fi 的人都能發指令。加上 --mqtt-user 與 --mqtt-pass 重新執行即可。');
   console.log('\n  ESP32 的 config.h 裡 MQTT_HOST 填上面那個 IP，埠 1883。');
   console.log('  沒有板子時想繼續看資料：node fake-nodes.js --url mqtt://localhost:1883\n');
   process.exit(0);

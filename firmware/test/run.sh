@@ -4,7 +4,7 @@ set -e
 cd "$(dirname "$0")"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -O1 core_test.cpp -o core_test
 ./core_test
-for s in entry_node zone_node; do for f in storega_core.h sha256.h; do
+for s in entry_node zone_node; do for f in storega_core.h sha256.h storega_net.h; do
   cmp -s "../common/$f" "../$s/$f" || { echo "✗ ../$s/$f is out of date: run firmware/sync-common.sh"; exit 1; }
 done; done
 echo "sketch copies of common/*.h are in sync"
