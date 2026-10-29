@@ -161,6 +161,8 @@ function palCommands(){
     {g:'動作',ic:'wifi',t:'立即校正 Wi-Fi',d:'以入口人數重算 k',run:()=>{go('settings/calib');setTimeout(()=>$('#calBtn').click(),350)}},
     {g:'動作',ic:'shield',t:S.gateMode==='closed'?'恢復自動限流':'暫停入場',d:S.gateMode==='closed'?'閘門回到自動模式':'閘門關閉，新顧客在門外排隊',run:()=>setGate(S.gateMode==='closed'?'auto':'closed')},
     {g:'動作',ic:'download',t:'匯出今日報表',d:'CSV',run:()=>exportData('CSV')},
+    {g:'動作',ic:'keyboard',t:'鍵盤快捷鍵',d:'所有快捷鍵一覽',k:'?',run:()=>window.openKeys?.()},
+    {g:'動作',ic:'cpu',t:'產生韌體設定 config.h',d:'設定 → 韌體設定',run:()=>go('settings/firmware')},
     {g:'動作',ic:isDark()?'sun':'moon',t:isDark()?'切換日間模式':'切換夜間模式',d:'',k:'T',run:()=>setTheme(isDark()?'light':'dark')},
     {g:'動作',ic:S.paused?'play':'pause',t:S.paused?'繼續即時更新':'暫停即時更新',d:'',k:'Space',run:togglePause},
     ...(S.source==='sim'?Object.entries(SCN).map(([k,v])=>({g:'模擬情境',ic:v.icon,t:'情境：'+v.name,d:v.desc,run:()=>setScenario(k,true)})):[]),
@@ -179,3 +181,9 @@ function drawPal(cmds){const q=$('#pq').value.trim().toLowerCase();palShown=cmds
   $('#pres').innerHTML=html||`<div class="none">找不到「${esc(q)}」<br><span style="font-size:13px">試試「校正」、「服飾」或「zone」</span></div>`;markPal()}
 function markPal(){$$('#pres .opt').forEach(o=>o.setAttribute('aria-selected',+o.dataset.k===palSel));$(`#pres .opt[data-k="${palSel}"]`)?.scrollIntoView({block:'nearest'})}
 function runPal(k){const c=palShown[k];closePal();c?.run()}
+
+/* ---------- alert sound: two falling tones for critical, one for warning ---------- */
+let actx=null;
+function chime(level){try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();const notes=level==='crit'?[880,660,880,660]:[740];
+  notes.forEach((f,i)=>{const o=actx.createOscillator(),g=actx.createGain(),t=actx.currentTime+i*.16;o.type='sine';o.frequency.value=f;
+    g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.12,t+.015);g.gain.exponentialRampToValueAtTime(.0001,t+.14);o.connect(g).connect(actx.destination);o.start(t);o.stop(t+.15)})}catch{}}

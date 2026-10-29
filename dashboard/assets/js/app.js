@@ -42,7 +42,7 @@ function renderBellList(){const L=S.alerts.filter(a=>!a.ack&&a.level!=='info').s
   $('#bellList').innerHTML=L.length?L.map(a=>`<div class="nt unread ${a.level}" data-id="${a.id}" tabindex="0"><span class="dot"></span><div><b>${esc(a.title)}</b><p>${esc(a.detail)}</p></div><time>${hhmm(a.t)}<button class="btn ghost sm ack" data-back="${a.id}">處理</button></time></div>`).join('')
     :`<div class="nempty"><span class="ok">${icon('check',20)}</span><br>沒有未處理的告警</div>`;
   $('#bellCount').textContent=n?`共 ${n} 則未處理`:'';$('#ackAll').disabled=!n}
-function onAlert(a){if(a.level==='info')return;const b=$('#bellBtn');b.classList.remove('ringit');void b.offsetWidth;b.classList.add('ringit');if(!$('#bellPop').hidden)renderBellList()}
+function onAlert(a){if(a.level==='info')return;if(S.sound)chime(a.level);const b=$('#bellBtn');b.classList.remove('ringit');void b.offsetWidth;b.classList.add('ringit');if(!$('#bellPop').hidden)renderBellList()}
 onLiveReset=()=>{replayIdx=null;receiptStart();OV.lastEntries=null;dots=[];window.twin?.reset();EV.key='';renderShell();renderPage();
   toast('ok','已切換到即時資料',S.offHours?'現在不在營業時間，時間軸從 10:00 開始計算。':'今天的數字從現在開始累積。')};
 /* one line under the top bar when the data itself needs explaining */
@@ -102,6 +102,25 @@ function bindShell(){
     if(view==='live'&&window.twin){if(k==='h')window.twin.toggleLayer('heat');if(k==='l')window.twin.toggleLayer('labels');if(k==='r'){window.twin.camera('iso');setSeg($('#camSeg'),b=>b.dataset.cam==='iso')}}
   });
   addEventListener('hashchange',route);
+  /* shortcuts dialog */
+  const keys=$('#keysScrim'),openKeys=()=>{closePops();closePal();keys.hidden=false;$('#keysX').focus()},closeKeys=()=>{keys.hidden=true};
+  $$('#keysScrim [data-mod]').forEach(k=>k.textContent=/Mac|iPhone|iPad/.test(navigator.platform)?'⌘':'Ctrl');
+  $('#keysX').onclick=closeKeys;keys.addEventListener('click',e=>{if(e.target===keys)closeKeys()});$('#welcomeKeys').onclick=openKeys;window.openKeys=openKeys;
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!keys.hidden){closeKeys();e.stopImmediatePropagation()}
+    if(e.key==='?'&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)){e.preventDefault();openKeys()}},true);
+  /* first run: say that this is simulated data and how to connect real hardware */
+  const w=$('#welcome');w.hidden=store.get('welcomed',false)||S.source!=='sim';
+  $('#welcomeX').onclick=()=>{store.set('welcomed',true);w.animate([{opacity:1},{opacity:0,transform:'translateY(-6px)'}],{duration:RM?1:220}).onfinish=()=>{w.hidden=true}};
+  /* KPI cards open the analytics tab that explains them */
+  const KT={in:'flow',conv:'conv',dwell:'zone',acc:'acc'};
+  $$('.kpi').forEach(c=>{c.tabIndex=0;c.setAttribute('role','link');c.setAttribute('aria-label',c.querySelector('.label').textContent+'，查看分析');
+    c.querySelector('.row svg').insertAdjacentHTML('beforebegin',`<span class="go">${icon('arrow',14)}</span>`);
+    const open=()=>{go('analytics');setTimeout(()=>setATab(KT[c.dataset.k]),60)};c.addEventListener('click',e=>{if(!e.target.closest('.spark-wrap'))open()});c.addEventListener('keydown',e=>{if(e.key==='Enter')open()})});
+  /* print the analytics as a one-page report */
+  $('#printBtn').onclick=()=>{renderAllAnalytics();setTimeout(()=>print(),50)};
+  /* events as CSV */
+  $('#evCsv').onclick=()=>{const rows=[['時間','等級','標題','說明','已處理']].concat(S.alerts.map(a=>[hhmmss(a.t),EVTXT[a.level],a.title,a.detail,a.ack?'是':'否']));
+    download(`storega-events-${new Date().toISOString().slice(0,10)}.csv`,'\ufeff'+rows.map(r=>r.map(c=>/[",\n]/.test(String(c))?`"${String(c).replace(/"/g,'""')}"`:c).join(',')).join('\n'),'text/csv');toast('ok','已匯出事件',`${S.alerts.length} 筆`)};
 }
 
 refreshPal();startModel();

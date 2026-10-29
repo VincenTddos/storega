@@ -45,6 +45,9 @@ function aAcc(){const cur=Math.floor(S.t/3600),hrs=S.hourly.filter(h=>h.h<=cur);
   const t=S.today,rr=t.base?t.errRaw/t.base:NaN,ee=t.base?t.errEst/t.base:NaN;
   $('#accStats').innerHTML=`<div><span class="label">原始誤差</span><b style="color:var(--zB)">${pct1(rr)}%</b></div><div><span class="label">校正後誤差</span><b style="color:var(--accent)">${pct1(ee)}%</b></div><div><span class="label">誤差下降</span><b style="color:var(--ok)">${isFinite(rr)&&rr>0?pct1(1-ee/rr):'—'}%</b></div>`}
 function renderAnalytics(){aStats();({flow:aFlow,conv:aConv,zone:aZone,acc:aAcc})[aTab]()}
+/* printing shows every tab, so draw them all first (button or Ctrl+P) */
+function renderAllAnalytics(){aStats();$('#matrix').dataset.k='';aFlow();aConv();aZone();aAcc();$('#printDate').textContent=`${new Date().toLocaleDateString('zh-TW')} · 截至 ${hhmm(S.t)}`}
+addEventListener('beforeprint',renderAllAnalytics);
 function setATab(t){aTab=t;store.set('aTab',t);$$('#aTabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.t===t));$$('.apanel').forEach(p=>p.hidden=p.dataset.t!==t);placeUl($('#aTabs'));renderAnalytics()}
 function initAnalytics(){$('#aTabs').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setATab(b.dataset.t)});
   $('#aTabs').addEventListener('keydown',e=>{if(e.key!=='ArrowRight'&&e.key!=='ArrowLeft')return;const bs=[...$$('#aTabs button')],i=bs.findIndex(b=>b.dataset.t===aTab),n=bs[(i+(e.key==='ArrowRight'?1:-1)+bs.length)%bs.length];setATab(n.dataset.t);n.focus()});

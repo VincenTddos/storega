@@ -21,12 +21,13 @@ function renderDevices(){
     spark(tr.querySelector('.rh'),n.rssiHist.length>1?n.rssiHist.map(v=>v==null?null:v+100):[0,0],{min:10,max:60,color:n.online?'var(--ink-3)':'var(--crit)',fmt:v=>v,label:()=>''});
     tr.querySelector('.ip').textContent=n.ip;tr.querySelector('.up').textContent=n.online?dur(S.t-n.boot):'—';
     const ago=S.t-n.lastSeen;tr.querySelector('.ls').textContent=ago<3?'剛剛':`${Math.round(ago)} 秒前`}
-  $('#dEmpty').hidden=shown>0;renderDrawer();
+  $('#dEmpty').hidden=shown>0;renderDrawer();renderConsole();
 }
 function renderDrawer(){const d=NODE_DEFS.find(x=>x.id===DV.sel),n=S.nodes[d.id],now=performance.now(),reb=n.rebootUntil>now,dr=$('#drawer');
   if(dr.dataset.id!==d.id){dr.dataset.id=d.id;dr.innerHTML=`<div class="dh"><span class="ic">${icon(d.id==='entry-01'?'door':'radar',20)}</span><div><b>${d.id}</b><small>${d.role}</small></div><span class="chip" id="drChip" style="margin-left:auto"></span></div>
     <div><span class="label">訊號 · 近 30 分鐘（dBm）</span><div class="chart" id="drChart" aria-label="${d.id} 訊號強度"></div></div>
     <dl id="drKv"></dl><div><span class="label" style="display:block;margin-bottom:8px">零件</span><div class="parts">${d.parts.split(' · ').map(p=>`<span>${p}</span>`).join('')}</div></div>
+    <div><span class="label" style="display:block;margin-bottom:6px">最近事件</span><ul class="evs" id="drEvs"></ul></div>
     <div class="topic"><code>sga/${d.id}/#</code><button class="btn ghost sm" data-copy="sga/${d.id}/#"><span class="mph">複製</span></button></div>
     <div class="acts3"><button class="btn sec sm" id="drLoc">${icon('pin',15)}定位</button><button class="btn sec sm" id="drBlink">${icon('zap',15)}<span class="mph" id="drBlinkL">閃燈</span></button><button class="btn sec sm" id="drReb">${icon('power',15)}<span class="mph" id="drRebL">重新開機</span></button></div>`;
     $('#drLoc').onclick=()=>{go('live');setTimeout(()=>{initTwin().then(()=>{window.twin?.focusNode(d.id);blinkNode(d.id)})},150)};
@@ -39,6 +40,21 @@ function renderDrawer(){const d=NODE_DEFS.find(x=>x.id===DV.sel),n=S.nodes[d.id]
   chart($('#drChart'),{type:'line',h:140,x:h.map((_,i)=>i===h.length-1?'現在':`${h.length-1-i} 分前`),every:Math.max(1,Math.ceil(h.length/4)),yMax:100,yFmt:v=>`${Math.round(v-100)}`,tipX:i=>i===h.length-1?'現在':`${h.length-1-i} 分鐘前`,
     series:[{name:'訊號',color:n.online?PAL.ink:PAL.crit,area:true,values:h.map(v=>v==null?null:v+100),fmt:v=>`${Math.round(v-100)} dBm`}]});
   $('#drBlink').disabled=!n.online||reb;$('#drLoc').disabled=false;
+  const evs=S.alerts.filter(a=>a.target?.node===d.id||a.title.includes(d.id)).slice(0,6),ek=evs.map(a=>a.id).join();
+  if($('#drEvs').dataset.k!==ek){$('#drEvs').dataset.k=ek;$('#drEvs').innerHTML=evs.length?evs.map(a=>`<li><i class="${a.level}"></i><span>${esc(a.title)}</span><time>${hhmm(a.t)}</time></li>`).join(''):'<li class="none">今天沒有這個節點的事件</li>'}
+}
+/* MQTT console: the raw protocol, live — what a teacher asks to see when they ask "is it really MQTT?" */
+const CON={dir:'all',q:'',paused:false,lastWall:0,open:new Set(),rateAt:performance.now(),rateN:0,rate:0};
+function renderConsole(){
+  const now=performance.now();if(now-CON.rateAt>2000){CON.rate=((S.msgCount||0)-CON.rateN)/((now-CON.rateAt)/1000);CON.rateN=S.msgCount||0;CON.rateAt=now}
+  $('#conRate').textContent=`${CON.rate.toFixed(1)} 則／秒 · ${S.source==='mqtt'?'來自 broker':'模擬器產生'}`;$('#conTotal').textContent=`今天共 ${(S.msgCount||0).toLocaleString()} 則`;
+  if(CON.paused)return;
+  const q=CON.q.toLowerCase(),L=(S.msgs||[]).filter(m=>(CON.dir==='all'||m.dir===CON.dir)&&(!q||m.topic.toLowerCase().includes(q))).slice(0,150);
+  const top=L[0]?.wall||0;if(top===CON.shownTop&&L.length===CON.shownN)return;CON.shownTop=top;CON.shownN=L.length;
+  $('#conList').innerHTML=L.length?L.map(m=>{const k=m.wall+m.topic,[,node,kind]=m.topic.split('/'),open=CON.open.has(k);let body=m.body;if(open){try{body=JSON.stringify(JSON.parse(m.body),null,2)}catch{}}
+    return`<div class="cl ${open?'open':''} ${m.wall>CON.lastWall&&CON.lastWall?'fresh':''}" data-k="${esc(k)}"><time>${hhmmss(m.t)}</time><span class="dir ${m.dir}">${m.dir==='out'?'指令':'上行'}</span><span class="tp">sga/<b>${esc(node)}</b>/${esc(kind)}</span><span class="pl">${esc(body)}</span><button class="cp" data-copy-msg="${esc(m.body)}" aria-label="複製內容">${icon('copy',14)}</button></div>`}).join('')
+    :`<div class="ev-empty">${q?`沒有符合「${esc(CON.q)}」的訊息`:'還沒有訊息'}</div>`;
+  CON.lastWall=top;
 }
 function selectNode(id){DV.sel=id;renderDevices();if(innerWidth<=1280)$('#drawer').scrollIntoView({behavior:RM?'auto':'smooth',block:'start'})}
 function initDevices(){
@@ -46,5 +62,10 @@ function initDevices(){
   $('#dQ').oninput=e=>{DV.q=e.target.value.trim();renderDevices()};
   $('#dBody').addEventListener('click',e=>{const tr=e.target.closest('tr');if(tr)selectNode(tr.dataset.node)});
   $('#dBody').addEventListener('keydown',e=>{if(e.key==='Enter'){const tr=e.target.closest('tr');if(tr)selectNode(tr.dataset.node)}});
+  $('#conSeg').addEventListener('pick',e=>{CON.dir=e.detail.dataset.d;CON.shownTop=0;renderConsole()});
+  $('#conQ').oninput=e=>{CON.q=e.target.value.trim();CON.shownTop=0;renderConsole()};
+  $('#conPause').onclick=()=>{CON.paused=!CON.paused;const b=$('#conPause');b.setAttribute('aria-pressed',CON.paused);b.querySelector('.isw').dataset.s=CON.paused?'b':'a';morph($('#conPauseL'),CON.paused?'繼續捲動':'暫停捲動');if(!CON.paused){CON.shownTop=0;renderConsole()}};
+  $('#conList').addEventListener('click',e=>{const c=e.target.closest('[data-copy-msg]');if(c){navigator.clipboard?.writeText(c.dataset.copyMsg).catch(()=>{});toast('ok','已複製訊息內容',c.dataset.copyMsg.slice(0,60));return}
+    const r=e.target.closest('.cl');if(!r)return;const k=r.dataset.k;CON.open.has(k)?CON.open.delete(k):CON.open.add(k);CON.shownTop=0;renderConsole()});
   $('#blinkAll').onclick=()=>{NODE_DEFS.forEach(d=>{if(S.nodes[d.id].online)blinkNode(d.id)});toast('info','全部節點閃燈 4 秒','在現場逐一確認每顆 ESP32 的位置。')};
 }

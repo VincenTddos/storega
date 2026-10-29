@@ -120,6 +120,12 @@
               <div class="menu right" id="expMenu" hidden role="menu"><button class="mi" role="menuitem" data-f="CSV">CSV 逐時報表<span class="kbd k">.csv</span></button><button class="mi" role="menuitem" data-f="JSON">JSON 原始資料<span class="kbd k">.json</span></button></div></div>
           </div>
         </div>
+        <section class="welcome" id="welcome" hidden aria-label="第一次使用">
+          <span class="wi"><svg class="i" style="width:20px"><use href="#store"/></svg></span>
+          <div><b>現在看到的是模擬資料</b><p>不需要任何硬體就能操作每一頁。要接上真的 ESP32 時，到「設定 → 資料來源」輸入 Node-RED 的位址；只想在電腦上測試 MQTT，可以執行 <code>cd tools &amp;&amp; npm install &amp;&amp; npm run demo</code>。</p>
+            <div class="row" style="margin-top:12px"><a class="btn pri sm" href="#settings/source">連接 Node-RED</a><button class="btn ghost sm" id="welcomeKeys">鍵盤快捷鍵</button></div></div>
+          <button class="btn ghost sm icon" id="welcomeX" aria-label="不再顯示"><svg class="i" style="width:15px"><use href="#x"/></svg></button>
+        </section>
         <div class="grid">
           <section class="card hero" aria-label="場內人數">
             <div style="position:relative;z-index:1">
@@ -197,7 +203,8 @@
       <!-- ============ 分析 ============ -->
       <section class="page" id="p-analytics" data-title="分析" aria-label="分析">
         <div class="ph"><div><span class="label">ANALYTICS · 開店至今</span><h1>分析</h1><p>人流、轉換、分區與 Wi-Fi 估計準確度。滑過圖表看每個時段的數字。</p></div>
-          <button class="btn sec" data-export="CSV"><svg class="i" style="width:16px"><use href="#download"/></svg>匯出 CSV</button></div>
+          <div class="row"><button class="btn ghost" id="printBtn"><svg class="i" style="width:16px"><use href="#chart"/></svg>列印報表</button><button class="btn sec" data-export="CSV"><svg class="i" style="width:16px"><use href="#download"/></svg>匯出 CSV</button></div></div>
+        <div class="printhead"><b>StoreGA 每日報表 · 信義旗艦店</b><span id="printDate"></span></div>
         <div class="stats4" id="aStats"></div>
         <div class="tabs" role="tablist" id="aTabs"><button role="tab" aria-selected="true" data-t="flow">人流</button><button role="tab" aria-selected="false" data-t="conv">轉換</button><button role="tab" aria-selected="false" data-t="zone">分區</button><button role="tab" aria-selected="false" data-t="acc">Wi-Fi 準確度</button><span class="ul"></span></div>
         <div class="apanel" data-t="flow">
@@ -228,6 +235,7 @@
           <div class="seg" role="group" aria-label="等級" id="evSeg"><span class="thumb"></span><button aria-pressed="true" data-lv="all">全部 <span class="n" id="evN-all"></span></button><button aria-pressed="false" data-lv="crit">嚴重 <span class="n" id="evN-crit"></span></button><button aria-pressed="false" data-lv="warn">警告 <span class="n" id="evN-warn"></span></button><button aria-pressed="false" data-lv="info">紀錄 <span class="n" id="evN-info"></span></button></div>
           <label class="switch"><input type="checkbox" id="evUnack"><span class="tr"></span>只看未處理</label>
           <div class="inp search"><span class="pre"><svg class="i" style="width:16px"><use href="#search"/></svg></span><input id="evQ" placeholder="搜尋事件…" aria-label="搜尋事件"></div>
+          <button class="btn ghost" id="evCsv"><svg class="i" style="width:16px"><use href="#download"/></svg>匯出</button>
         </div>
         <div class="card evcard"><div class="evlist" id="evList"></div></div>
       </section>
@@ -243,6 +251,15 @@
           <div class="card tblcard"><table class="tbl" id="dTbl"><thead><tr><th>節點</th><th>狀態</th><th>訊號</th><th>近 30 分鐘</th><th>IP</th><th>運行</th><th>最後回報</th></tr></thead><tbody id="dBody"></tbody></table><div class="emptyrow" id="dEmpty" hidden>沒有符合的裝置</div></div>
           <aside class="card drawer" id="drawer" aria-label="裝置細節"></aside>
         </div>
+        <section class="card console" aria-label="MQTT 訊息">
+          <div class="card-h"><div><h3>MQTT 訊息</h3><p class="sub2" id="conSub">每一則上行資料與下行指令，最新的在最上面</p></div>
+            <div class="row"><div class="seg" role="group" aria-label="方向" id="conSeg"><span class="thumb"></span><button aria-pressed="true" data-d="all">全部</button><button aria-pressed="false" data-d="in">上行</button><button aria-pressed="false" data-d="out">指令</button></div>
+              <div class="inp search sm"><span class="pre"><svg class="i" style="width:15px"><use href="#search"/></svg></span><input id="conQ" placeholder="篩選主題，例如 zone-B" aria-label="篩選主題"></div>
+              <button class="btn sec sm" id="conPause" aria-pressed="false"><span class="isw" data-s="a"><svg class="i a" style="width:15px"><use href="#pause"/></svg><svg class="i b" style="width:15px"><use href="#play"/></svg></span><span class="mph" id="conPauseL">暫停捲動</span></button></div></div>
+          <div class="conhead"><span>時間</span><span></span><span>主題</span><span>內容</span></div>
+          <div class="conlist" id="conList" role="log" aria-live="off"></div>
+          <div class="confoot"><span id="conRate">0 則／秒</span><span id="conTotal"></span></div>
+        </section>
       </section>
 
       <!-- ============ 設定 ============ -->
@@ -254,6 +271,7 @@
             <a href="#settings/calib" data-s="calib"><svg class="i"><use href="#wifi"/></svg>Wi-Fi 校正</a>
             <a href="#settings/source" data-s="source"><svg class="i"><use href="#plug"/></svg>資料來源</a>
             <a href="#settings/alerts" data-s="alerts"><svg class="i"><use href="#bell"/></svg>通知</a>
+            <a href="#settings/firmware" data-s="firmware"><svg class="i"><use href="#cpu"/></svg>韌體設定</a>
             <a href="#settings/look" data-s="look"><svg class="i"><use href="#sun"/></svg>外觀</a>
             <a href="#settings/data" data-s="data"><svg class="i"><use href="#download"/></svg>資料</a>
           </nav>
@@ -294,6 +312,23 @@
                 <label class="switch"><input type="checkbox" data-nt="warn" checked><span class="tr"></span><span><b>警告</b><small>接近上限、分區擁擠、溫度偏高</small></span></label>
                 <label class="switch"><input type="checkbox" data-nt="info"><span class="tr"></span><span><b>紀錄</b><small>校正、重開機、設定變更</small></span></label>
               </div>
+              <div class="swlist" style="margin-top:22px;padding-top:20px;border-top:1px solid var(--line)"><div class="row" style="justify-content:space-between"><label class="switch"><input type="checkbox" id="fSound"><span class="tr"></span><span><b>告警聲</b><small>嚴重告警響兩聲、警告響一聲；櫃台不看螢幕時也知道</small></span></label><button class="btn ghost sm" id="soundTry" type="button">試聽</button></div></div>
+            </div>
+            <div class="card spanel" data-s="firmware" hidden>
+              <div class="sh2"><h2>韌體設定</h2><p>在這裡填好，就能產生要放進 Arduino 專案的 <code>config.h</code>。內容只存在這台電腦的瀏覽器裡。</p></div>
+              <div class="fgrid">
+                <div class="f"><label for="fwNode">節點</label><div class="inp"><select id="fwNode"><option>entry-01</option><option>zone-A</option><option>zone-B</option><option>zone-C</option><option>zone-D</option></select><span class="chev"><svg class="i" style="width:15px"><use href="#chev"/></svg></span></div></div>
+                <div class="f"><label for="fwHost">Node-RED 電腦 IP</label><div class="inp" id="fwHostBox"><input id="fwHost" placeholder="192.168.50.10" spellcheck="false"></div><span class="help" id="fwHostH">ESP32 會連到這台電腦的 1883 埠。</span></div>
+                <div class="f"><label for="fwSsid">Wi-Fi 名稱</label><div class="inp"><input id="fwSsid" placeholder="店裡的 Wi-Fi" spellcheck="false"></div></div>
+                <div class="f"><label for="fwPass">Wi-Fi 密碼 <small>只會出現在產生的檔案裡</small></label><div class="inp"><input id="fwPass" type="password" autocomplete="off"><button class="btn ghost sm icon" id="fwEye" type="button" aria-label="顯示密碼" style="margin-right:4px"><svg class="i" style="width:15px"><use href="#target"/></svg></button></div></div>
+                <div class="f zoneonly"><label for="fwSalt">雜湊用的鹽 <small>每間店不同</small></label><div class="inp"><input id="fwSalt" spellcheck="false"><button class="btn ghost sm" id="fwSaltNew" type="button" style="margin-right:4px">換一組</button></div><span class="help">四顆分區節點要用同一組，才不會把同一支手機算成不同裝置。</span></div>
+                <div class="f zoneonly"><label for="fwRssi">訊號門檻 <small id="fwRssiV">−75 dBm</small></label><div class="slider"><input type="range" id="fwRssi" min="-90" max="-50" value="-75" style="--p:37.5%"><div class="marks"><span>−90 遠</span><span>−70</span><span>−50 近</span></div></div></div>
+                <div class="f full zoneonly"><label class="switch"><input type="checkbox" id="fwRadar" checked><span class="tr"></span>這一區有裝 LD2410 雷達</label></div>
+              </div>
+              <div class="staff zoneonly"><div class="row" style="justify-content:space-between"><span class="label">員工手機白名單</span><span class="help">序列埠輸入 l 讀出雜湊後貼上（16 個英數字）</span></div>
+                <div class="chips" id="staffList"></div>
+                <div class="row" style="margin-top:10px"><div class="inp" id="staffBox" style="flex:1;min-width:200px"><input id="staffIn" placeholder="例如 3fa94c07be1d2e88" spellcheck="false" maxlength="16"></div><button class="btn sec" type="button" id="staffAdd">加入</button></div></div>
+              <div class="codebox"><div class="codehead"><span class="mono" id="fwFile">entry_node/config.h</span><div class="row"><button class="btn ghost sm" id="fwCopy" type="button"><span class="mph">複製</span></button><button class="btn sec sm" id="fwDl" type="button"><svg class="i" style="width:15px"><use href="#download"/></svg>下載</button></div></div><pre id="fwCode"></pre></div>
             </div>
             <div class="card spanel" data-s="look" hidden>
               <div class="sh2"><h2>外觀</h2><p>夜間模式適合打烊後或櫃台光線較暗時使用。</p></div>
@@ -315,6 +350,10 @@
 <div class="scrim" id="delScrim" hidden><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="delT"><span class="di"><svg class="i"><use href="#warn"/></svg></span><h3 id="delT">清除今日資料？</h3><p>今天的進場紀錄、結帳與事件都會刪除。請輸入門市名稱「<b style="color:var(--ink)">信義旗艦店</b>」確認。</p>
   <div class="f"><div class="inp"><input id="delIn" placeholder="信義旗艦店" autocomplete="off" aria-label="輸入門市名稱"></div></div>
   <div class="acts2"><button class="btn ghost" id="delCancel">取消</button><button class="btn dan" id="delGo" disabled>清除今日資料</button></div></div></div>
+<div class="scrim" id="keysScrim" hidden><div class="dialog keys" role="dialog" aria-modal="true" aria-labelledby="keysT"><div class="row" style="justify-content:space-between"><h3 id="keysT">鍵盤快捷鍵</h3><button class="btn ghost sm icon" id="keysX" aria-label="關閉"><svg class="i" style="width:15px"><use href="#x"/></svg></button></div>
+  <dl class="kl"><dt><span class="kbd" data-mod>⌘</span><span class="kbd">K</span></dt><dd>指令面板：搜尋頁面、分區、裝置、動作</dd><dt><span class="kbd">/</span></dt><dd>也可以打開指令面板</dd><dt><span class="kbd">1</span>–<span class="kbd">6</span></dt><dd>切換到第 1–6 頁</dd>
+    <dt><span class="kbd">T</span></dt><dd>日間／夜間模式</dd><dt><span class="kbd">Space</span></dt><dd>暫停／繼續即時更新</dd><dt><span class="kbd">Esc</span></dt><dd>關閉選單、對話框，或結束回放</dd>
+    <dt><span class="kbd">H</span> <span class="kbd">L</span> <span class="kbd">R</span></dt><dd>即時店況：熱度圖、區域標籤、重設視角</dd><dt><span class="kbd">←</span><span class="kbd">→</span></dt><dd>時間軸、圖表：逐格移動（Shift 一次 10 格）</dd><dt><span class="kbd">?</span></dt><dd>打開這個說明</dd></dl></div></div>
 <div class="sr-only" id="announce" aria-live="assertive"></div>
 
 <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.163.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.163.0/examples/jsm/"}}</script>

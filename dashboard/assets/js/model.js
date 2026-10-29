@@ -228,7 +228,7 @@ const accNow=()=>S.today.base?Math.max(0,1-S.today.errEst/S.today.base):0;
 const accRaw=()=>S.today.base?Math.max(0,1-S.today.errRaw/S.today.base):0;
 const dwellMin=()=>S.today.dwellN?S.today.dwellSum/S.today.dwellN/60:0;
 const peakToday=()=>{let p={occ:occ(),t:S.t};for(const s of S.series)if(s.occ>p.occ)p=s;return p};
-function persist(){store.set('settings',{capacity:S.capacity,threshold:S.threshold,gateMode:S.gateMode,kAuto:S.kAuto,whitelist:S.whitelist,speed:S.speed,notify:S.notify})}
+function persist(){store.set('settings',{capacity:S.capacity,threshold:S.threshold,gateMode:S.gateMode,kAuto:S.kAuto,whitelist:S.whitelist,speed:S.speed,notify:S.notify,sound:S.sound})}
 
 /* ================= export ================= */
 function buildCSV(){
