@@ -94,8 +94,10 @@ function sample(){
     if(S.scenario==='noise'&&(zid==='A'||zid==='C'))raw+=poisson(7);
     z.raw=Math.round(raw);
     if(zd.radar){z.presence=z.truth>0||R()<.03;z.moving=z.presence&&R()<.7}
-    if(!S.preroll)S.fx.push({type:'wifi',node:d.id});
+    if(!S.preroll){S.fx.push({type:'wifi',node:d.id});logMsg(`sga/${d.id}/wifi`,{raw:z.raw});if(zd.radar)logMsg(`sga/${d.id}/radar`,{presence:z.presence,moving:z.moving})}
   }
+  if(!S.preroll){const o=occ();logMsg('sga/entry-01/counter',{in:S.today.entries,out:S.today.exits,occupancy:o,queue:S.queue,checkout:S.today.checkouts,gate:S.gateOpen,temp:+S.temp.toFixed(1),hum:Math.round(S.hum)});
+    const d=NODE_DEFS[(S.msgSeq=(S.msgSeq||0)+1)%NODE_DEFS.length],n=S.nodes[d.id];if(n.online)logMsg(`sga/${d.id}/status`,{rssi:n.rssi,ip:n.ip,fw:n.fw,uptime:Math.round(S.t-n.boot)})}
   fuse();
   const hr=hourAt(S.t);ZONES.forEach(z=>hr.zsum[z.id]+=S.source==='sim'?S.zones[z.id].truth:S.zones[z.id].est);hr.zn++;
 }
@@ -150,7 +152,7 @@ function addAlert(key,level,title,detail,{cool=900,target=null}={}){
      sga/zone-X/radar      {presence,moving}
      sga/<node>/status     {rssi,ip,fw,uptime}
      sga/<node>/cmd        ← {action:'gate'|'capacity'|'calibrate'|'blink'|'reboot', ...}   */
-let client=null;
+let client=null,onLiveReset;
 function loadMqtt(){return new Promise((res,rej)=>{if(window.mqtt)return res();const s=document.createElement('script');s.src='https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js';s.onload=res;s.onerror=()=>rej();document.head.appendChild(s)})}
 async function mqttConnect(url){
   if(!/^wss?:\/\/[^\s/:]+(:\d{2,5})?\/?$/.test(url)){onMqtt.status('err','');return}
@@ -158,14 +160,16 @@ async function mqttConnect(url){
   try{await loadMqtt()}catch{onMqtt.status('err','mqtt.js 載入失敗，請確認電腦有網路。');return}
   if(client){client.end(true);client=null}
   client=window.mqtt.connect(url,{reconnectPeriod:3000,connectTimeout:6000,clientId:'storega-ui-'+Math.random().toString(16).slice(2,8)});
-  client.on('connect',()=>{client.subscribe('sga/+/+');setSource('mqtt');store.set('mqttUrl',url);onMqtt.status('ok','已連線 · 訂閱 sga/+/+')});
+  client.on('connect',()=>{client.subscribe('sga/+/+');if(S.source!=='mqtt')resetForLive();setSource('mqtt');store.set('mqttUrl',url);onMqtt.status('ok','已連線 · 訂閱 sga/+/+')});
   client.on('error',e=>onMqtt.status('err',`連線失敗：${e.message}。請確認 Aedes 的 WebSocket 埠已開啟、電腦與 ESP32 在同一個網路。`));
   client.on('close',()=>{if(S.source==='mqtt')onMqtt.status('busy','連線中斷，3 秒後自動重試…')});
   client.on('message',(topic,buf)=>{let m;try{m=JSON.parse(buf.toString())}catch{return}if(!S.paused)onMqtt(topic,m)});
 }
 function onMqtt(topic,m){
   const [,id,kind]=topic.split('/'),n=S.nodes[id];if(!n)return;
-  S.lastData=performance.now();n.lastSeen=S.t;
+  S.lastData=performance.now();logMsg(topic,m,'in');
+  if(m.online===false){n.lastSeen=S.t-99;return}  /* MQTT last will: the board dropped off the network */
+  n.lastSeen=S.t;
   if(m.rssi!=null)n.rssi=m.rssi;if(m.ip)n.ip=m.ip;if(m.fw)n.fw=m.fw;if(m.uptime!=null)n.boot=S.t-m.uptime;
   if(kind==='counter'){
     if(m.in!=null){const d=m.in-(S.mqIn??m.in);if(d>0){hourAt(S.t).entries+=d;S.fx.push({type:'door'})}S.mqIn=m.in;S.today.entries=m.in}
@@ -175,6 +179,7 @@ function onMqtt(topic,m){
     if(m.temp!=null)S.temp=m.temp;if(m.hum!=null)S.hum=m.hum;
     S.gateOpen=m.gate!=null?!!m.gate:(S.gateMode==='open'||(S.gateMode==='auto'&&occ()<S.capacity));
     if(m.dwell_avg!=null){S.today.dwellSum=m.dwell_avg;S.today.dwellN=1}
+    if(['auto','open','closed'].includes(m.mode))S.gateMode=m.mode;if(m.capacity>=10&&m.capacity<=80)S.capacity=m.capacity;
   }else{
     const z=S.zones[id.slice(-1)];if(!z)return;
     if(kind==='wifi'){if(m.raw!=null)z.raw=m.raw;if(m.dwell_avg!=null){z.dwellSum=m.dwell_avg;z.dwellN=1}S.fx.push({type:'wifi',node:id})}
@@ -183,7 +188,17 @@ function onMqtt(topic,m){
   fuse();
 }
 onMqtt.status=()=>{};
-function mqttCmd(node,payload){if(client&&S.source==='mqtt')client.publish(`sga/${node}/cmd`,JSON.stringify(payload))}
+function mqttCmd(node,payload){logMsg(`sga/${node}/cmd`,payload,'out');if(client&&S.source==='mqtt')client.publish(`sga/${node}/cmd`,JSON.stringify(payload))}
+/* every message in or out, newest first; the 裝置 page shows it as a live console */
+function logMsg(topic,obj,dir='in'){const L=S.msgs||(S.msgs=[]);L.unshift({t:S.t,wall:Date.now(),topic,dir,sim:S.source==='sim',body:JSON.stringify(obj)});if(L.length>300)L.length=300;S.msgCount=(S.msgCount||0)+1}
+/* switching to real hardware: start today's numbers from zero at the real time of day (or 10:00 outside opening hours) */
+function resetForLive(){
+  const keep={speed:S.speed,capacity:S.capacity,threshold:S.threshold,gateMode:S.gateMode,whitelist:S.whitelist,kAuto:S.kAuto,notify:S.notify,k:S.k};
+  S=freshState();Object.assign(S,keep);S.preroll=false;
+  const d=new Date(),tod=d.getHours()*3600+d.getMinutes()*60+d.getSeconds();S.offHours=tod<OPEN||tod>=CLOSE;S.t=S.offHours?OPEN:tod;
+  NODE_DEFS.forEach(x=>{S.nodes[x.id].lastSeen=S.t;S.nodes[x.id].rssiHist=[]});S.agents=[];S.alertVer++;onLiveReset();
+}
+onLiveReset=()=>{};
 function setSource(src){
   S.source=src;
   if(src==='sim'&&client){client.end(true);client=null}
@@ -196,7 +211,8 @@ function tick(){
   const now=performance.now(),real=Math.min(1,(now-lastTick)/1000);lastTick=now;
   if(S.paused)return;
   if(S.source==='sim'){let d=real*S.speed;while(d>0){const st=Math.min(d,2);simStep(st);d-=st}S.lastData=now}
-  else{S.t+=real;S.acc60+=real;if(S.acc60>=60){S.acc60-=60;minute()}}
+  else{S.t+=real;S.acc5+=real;if(S.acc5>=5){S.acc5-=5;const hr=hourAt(S.t);ZONES.forEach(z=>hr.zsum[z.id]+=S.zones[z.id].stale?0:S.zones[z.id].est);hr.zn++}
+    S.acc60+=real;if(S.acc60>=60){S.acc60-=60;minute()}}
   checkNodes();checkAlerts();
 }
 

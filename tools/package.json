@@ -1,0 +1,17 @@
+{
+  "name": "storega-tools",
+  "private": true,
+  "description": "StoreGA 開發工具：本機 MQTT broker 與模擬 ESP32 節點，不需要硬體就能測 Node-RED 與儀表板的 MQTT 模式",
+  "scripts": {
+    "broker": "node broker.js",
+    "nodes": "node fake-nodes.js",
+    "demo": "node demo.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "aedes": "0.51.3",
+    "mqtt": "5.10.1",
+    "websocket-stream": "5.5.2"
+  }
+}

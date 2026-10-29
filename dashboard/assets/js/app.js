@@ -30,7 +30,7 @@ function renderShell(){
   $('#fresh').textContent=ago<2?'剛剛':`${Math.round(ago)} 秒前`;
   $('#spSrc').textContent=live?'Node-RED（MQTT）':'模擬器（不需要硬體）';setSeg($('#speedSeg'),x=>+x.dataset.speed===S.speed);
   $$('#speedSeg button').forEach(x=>x.disabled=live);$$('#scnList button').forEach(x=>{x.disabled=live;x.setAttribute('aria-checked',x.dataset.scn===S.scenario)});
-  $('#toLive').hidden=!sn;renderBadges();
+  $('#toLive').hidden=!sn;renderBadges();renderBanner();
 }
 function renderBadges(){
   const n=S.alerts.filter(a=>!a.ack&&a.level!=='info').length,off=NODE_DEFS.filter(d=>!S.nodes[d.id].online).length;
@@ -43,6 +43,15 @@ function renderBellList(){const L=S.alerts.filter(a=>!a.ack&&a.level!=='info').s
     :`<div class="nempty"><span class="ok">${icon('check',20)}</span><br>沒有未處理的告警</div>`;
   $('#bellCount').textContent=n?`共 ${n} 則未處理`:'';$('#ackAll').disabled=!n}
 function onAlert(a){if(a.level==='info')return;const b=$('#bellBtn');b.classList.remove('ringit');void b.offsetWidth;b.classList.add('ringit');if(!$('#bellPop').hidden)renderBellList()}
+onLiveReset=()=>{replayIdx=null;receiptStart();OV.lastEntries=null;dots=[];window.twin?.reset();EV.key='';renderShell();renderPage();
+  toast('ok','已切換到即時資料',S.offHours?'現在不在營業時間，時間軸從 10:00 開始計算。':'今天的數字從現在開始累積。')};
+/* one line under the top bar when the data itself needs explaining */
+function renderBanner(){const b=$('#sysBanner'),live=S.source==='mqtt',ago=(performance.now()-S.lastData)/1000,act=$('#sysAct');let txt='',btn='';
+  if(live&&ago>15&&!S.paused){txt=`<b>資料延遲 ${Math.round(ago)} 秒</b>　沒有收到任何節點的訊息，畫面停在 ${hhmmss(S.t-ago)} 的最後一筆；連線恢復後會自動補上。`;btn='切回模擬器'}
+  else if(live&&S.offHours)txt='<b>非營業時間</b>　目前不在 10:00–22:00，時間軸從 10:00 開始計算，數字仍然即時。';
+  else if(S.paused)txt='<b>已暫停更新</b>　畫面停在目前這一刻，按 Space 或右上角「模擬器」繼續。',btn='繼續';
+  b.hidden=!txt;if(!txt)return;if($('#sysTxt').innerHTML!==txt)$('#sysTxt').innerHTML=txt;act.hidden=!btn;act.textContent=btn;
+  act.onclick=btn==='繼續'?togglePause:()=>{setSource('sim');toast('info','已切回模擬器','')}}
 function onSource(){renderShell();renderSettings();if(view==='devices')renderDevices()}
 function onTheme(){renderPage();if(view==='live')renderTimeline()}
 
