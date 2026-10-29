@@ -31,7 +31,7 @@ cd tools && npm install && npm run demo
 
 **3. 接上真的硬體**：
 
-1. Node-RED 安裝 `node-red-contrib-aedes`，匯入 `node-red/flows.json` → 部署（見 [node-red/README.md](node-red/README.md)）。
+1. 啟動 Node-RED，再執行 `cd tools && npm install && npm run connect`：自動安裝 Aedes、匯入 flow、用模擬節點測試，最後印出儀表板要填的位址（手動步驟見 [node-red/README.md](node-red/README.md)）。
 2. 儀表板「設定 → 韌體設定」填 Wi-Fi 與 Node-RED 電腦的 IP，下載每塊板子的 `config.h`。
 3. 照 [firmware/README.md](firmware/README.md) 的接線表接線、燒錄 `entry_node` 與四顆 `zone_node`。
 4. 儀表板「設定 → 資料來源」輸入 `ws://<Node-RED 電腦 IP>:8080` → 連線。

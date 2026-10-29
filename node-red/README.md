@@ -13,7 +13,17 @@
 
 告警格式：`{ key, level: "crit"|"warn"|"info", title, detail, ts, source: "node-red" }`。
 
-## 安裝
+## 一鍵安裝（建議）
+
+先啟動 Node-RED（終端機執行 `node-red`），再開另一個終端機：
+
+```bash
+cd tools && npm install && npm run connect
+```
+
+它會：確認 Node-RED 在 `http://localhost:1880` 執行 → 缺少時自動安裝 `node-red-contrib-aedes`（不用重開）→ 把 StoreGA 加成獨立分頁並部署（不動你其他分頁；原本已有 Aedes 或 1883 被占用時會先問你）→ 用 5 個模擬 ESP32 測試直到收到 `sga/system/state` → 印出儀表板要填的 `ws://…:8080`。重複執行只會更新 StoreGA 分頁。Node-RED 不在本機或不是 1880 埠時加 `-- --url http://IP:埠`。
+
+## 手動安裝
 
 1. Node-RED 3.x 或 4.x 都可以。選單 → **管理節點** → 安裝 `node-red-contrib-aedes`。
 2. 選單 → **匯入** → 選 `node-red/flows.json` → **部署**。
