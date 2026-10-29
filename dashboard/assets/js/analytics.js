@@ -7,10 +7,12 @@ function aStats(){
   const box=$('#aStats');if(!box.children.length)box.innerHTML=items.map(i=>`<div class="stat"><span class="label">${icon(i[0],14)}${i[1]}</span><b></b><p></p></div>`).join('');
   [...box.children].forEach((c,k)=>{const b=c.querySelector('b');if(b.innerHTML!==items[k][2])b.innerHTML=items[k][2];c.querySelector('p').textContent=items[k][3]});
 }
-function aFlow(){const cur=Math.floor(S.t/3600);
-  chart($('#chHour'),{type:'bar',h:260,x:S.hourly.map(h=>`${h.h}時`),yMax:niceMax(Math.max(10,...S.hourly.map(h=>h.entries))),
+/* hours still to come: yesterday's hourly share of the day × today's pace so far */
+const hourFc=h=>Math.round(YK().entries*(CUM[(h-9)*60]-CUM[(h-10)*60])/CUM[720]*fcRatio());
+function aFlow(){const cur=Math.floor(S.t/3600),fc=S.hourly.map(h=>h.h>cur?hourFc(h.h):null);
+  chart($('#chHour'),{type:'bar',h:260,x:S.hourly.map(h=>`${h.h}時`),yMax:niceMax(Math.max(10,...S.hourly.map(h=>h.entries),...fc.filter(v=>v!=null))),
     tipX:i=>`${pad(S.hourly[i].h)}:00 – ${pad(S.hourly[i].h+1)}:00`,tipExtra:i=>{const h=S.hourly[i];return h.entries?`<div class="r m">轉換率<b>${pct1(h.checkouts/h.entries)}%</b></div>`:''},
-    series:[{name:'進場',color:PAL.ink,values:S.hourly.map(h=>h.h>cur?null:h.entries),fmt:v=>v+' 人'},{name:'結帳',color:PAL.accent,values:S.hourly.map(h=>h.h>cur?null:h.checkouts),fmt:v=>v+' 筆'}]});
+    series:[{name:'進場',color:PAL.ink,values:S.hourly.map(h=>h.h>cur?null:h.entries),fmt:v=>v+' 人'},{name:'結帳',color:PAL.accent,values:S.hourly.map(h=>h.h>cur?null:h.checkouts),fmt:v=>v+' 筆'},{name:'預測進場',color:PAL.ink,ghost:true,values:fc,fmt:v=>'約 '+v+' 人'}]});
   const wk=[...S.days,{label:'今天',sub:'即時',entries:S.today.entries,checkouts:S.today.checkouts}];
   chart($('#chWeek'),{type:'bar',h:260,x:wk.map(d=>d.label),sub:wk.map(d=>`${d.entries?(d.checkouts/d.entries*100).toFixed(1):'0'}%`),every:1,yMax:niceMax(Math.max(...wk.map(d=>d.entries))),
     tipX:i=>`${wk[i].label} ${wk[i].sub}`,series:[{name:'進場',color:PAL.ink,values:wk.map(d=>d.entries),fmt:v=>v+' 人'},{name:'結帳',color:PAL.accent,values:wk.map(d=>d.checkouts),fmt:v=>v+' 筆'}]})}

@@ -66,6 +66,7 @@
     <div class="logo"><div class="m"><i></i></div><div><b>StoreGA</b><span>人流與限流系統</span></div></div>
     <button class="store" id="storeBtn" aria-haspopup="true"><span class="av">信</span><div>信義旗艦店<small>台北市 · 1F · 4 區</small></div><svg class="i" style="width:16px;color:var(--ink-4)"><use href="#chev"/></svg></button>
     <nav class="nav" aria-label="主要頁面">
+      <span class="navind" aria-hidden="true"></span>
       <a href="#overview" data-page="overview"><svg class="i"><use href="#home"/></svg><span>總覽</span></a>
       <a href="#live" data-page="live"><svg class="i"><use href="#cube"/></svg><span>即時店況</span></a>
       <a href="#analytics" data-page="analytics"><svg class="i"><use href="#chart"/></svg><span>分析</span></a>
@@ -121,18 +122,23 @@
           </div>
         </div>
         <section class="welcome" id="welcome" hidden aria-label="第一次使用">
-          <span class="wi"><svg class="i" style="width:20px"><use href="#store"/></svg></span>
-          <div><b>現在看到的是模擬資料</b><p>不需要任何硬體就能操作每一頁。要接上真的 ESP32 時，到「設定 → 資料來源」輸入 Node-RED 的位址；只想在電腦上測試 MQTT，可以執行 <code>cd tools &amp;&amp; npm install &amp;&amp; npm run demo</code>。</p>
-            <div class="row" style="margin-top:12px"><a class="btn pri sm" href="#settings/source">連接 Node-RED</a><button class="btn ghost sm" id="welcomeKeys">鍵盤快捷鍵</button></div></div>
-          <button class="btn ghost sm icon" id="welcomeX" aria-label="不再顯示"><svg class="i" style="width:15px"><use href="#x"/></svg></button>
+          <span class="wi"><svg class="i" style="width:18px"><use href="#store"/></svg></span>
+          <p><b>現在看到的是模擬資料</b>不需要硬體就能操作每一頁；接上 ESP32 時到「設定 → 資料來源」填 Node-RED 位址。</p>
+          <div class="row"><a class="btn pri sm" href="#settings/source">連接 Node-RED</a><button class="btn ghost sm" id="welcomeKeys"><svg class="i" style="width:15px"><use href="#keyboard"/></svg>快捷鍵</button><button class="btn ghost sm icon" id="welcomeX" aria-label="不再顯示"><svg class="i" style="width:15px"><use href="#x"/></svg></button></div>
         </section>
         <div class="grid">
           <section class="card hero" aria-label="場內人數">
-            <div style="position:relative;z-index:1">
+            <div class="hero-l">
               <span class="label">場內人數 · 入口紅外線</span>
               <div class="big"><b id="bigOcc">0</b><span id="bigCap">/40</span></div>
               <div class="ticks" id="ticks" aria-hidden="true"></div>
               <p class="sub" id="heroSub"></p>
+              <span class="lim-note" id="limNote"></span>
+              <div class="hk" id="heroK">
+                <div><span class="label">還能進</span><b id="hkLeft">0<small>人</small></b></div>
+                <div><span class="label">近 15 分鐘</span><b id="hkPace">+0 / −0</b></div>
+                <div><span class="label">30 分鐘後</span><b id="hkFc">約 0<small>人</small></b></div>
+              </div>
             </div>
             <div class="hero-r">
               <div class="facts">
@@ -141,9 +147,8 @@
                 <div><span class="label">入口溫濕度</span><b id="fEnv">--</b></div>
                 <div><span class="label">Wi-Fi 校正</span><b id="fK">k 0.62</b></div>
               </div>
-              <div><span class="label">近 90 分鐘</span><span class="flowkey"><span><i></i>今天</span><span><i class="y"></i>昨天</span></span><div class="flow-wrap"><svg class="flow" id="flow" viewBox="0 0 300 84" preserveAspectRatio="none" aria-hidden="true"></svg></div></div>
+              <div><span class="label">近 90 分鐘 · 未來 30 分鐘</span><span class="flowkey"><span><i></i>今天</span><span><i class="f"></i>預測</span><span><i class="y"></i>昨天</span></span><div class="flow-wrap"><svg class="flow" id="flow" viewBox="0 0 300 84" preserveAspectRatio="none" aria-hidden="true"></svg></div></div>
             </div>
-            <span class="lim-note" id="limNote"></span>
           </section>
           <section class="card map" aria-label="四區即時分布">
             <div class="card-h"><h3>此刻的人在哪</h3><a class="link" href="#live">開啟即時店況<svg class="i ar" viewBox="0 0 16 16"><path class="sh" d="M3 8h9.5"/><path class="hd" d="M8.5 4l4 4-4 4"/></svg></a></div>
@@ -157,12 +162,14 @@
           <section class="card todo" aria-label="需要處理">
             <div class="card-h"><h3>需要處理 <span class="mono" id="todoN" style="color:var(--ink-4);font-weight:400"></span></h3><a class="link" href="#events">全部事件<svg class="i ar" viewBox="0 0 16 16"><path class="sh" d="M3 8h9.5"/><path class="hd" d="M8.5 4l4 4-4 4"/></svg></a></div>
             <ul class="list" id="todo"></ul>
+            <div class="todo-sum" id="todoSum"></div>
           </section>
           <section class="card dev" aria-label="裝置健康">
             <div class="card-h"><h3>裝置健康</h3><span class="chip ok" id="devChip"><i></i>5 / 5 在線</span></div>
             <div class="devgrid" id="devs"></div>
             <div class="uptime" id="uptime" aria-label="今天各時段的連線狀態"></div>
             <div class="uptime-l"><span>10:00</span><span>營業時間 · 每格 15 分鐘</span><span>22:00</span></div>
+            <div class="dev-sum" id="devSum"></div>
           </section>
         </div>
       </section>
@@ -208,7 +215,7 @@
         <div class="stats4" id="aStats"></div>
         <div class="tabs" role="tablist" id="aTabs"><button role="tab" aria-selected="true" data-t="flow">人流</button><button role="tab" aria-selected="false" data-t="conv">轉換</button><button role="tab" aria-selected="false" data-t="zone">分區</button><button role="tab" aria-selected="false" data-t="acc">Wi-Fi 準確度</button><span class="ul"></span></div>
         <div class="apanel" data-t="flow">
-          <div class="card"><div class="card-h"><h3>每小時進場與結帳</h3><span class="lgd"><span><i style="background:var(--ink)"></i>進場</span><span><i style="background:var(--accent)"></i>結帳</span></span></div><div class="chart" id="chHour" aria-label="每小時進場與結帳人數"></div></div>
+          <div class="card"><div class="card-h"><h3>每小時進場與結帳</h3><span class="lgd"><span><i style="background:var(--ink)"></i>進場</span><span><i style="background:var(--accent)"></i>結帳</span><span><i class="ghost"></i>預測進場</span></span></div><div class="chart" id="chHour" aria-label="每小時進場與結帳人數"></div></div>
           <div class="card"><div class="card-h"><h3>近 7 天</h3><span class="lgd"><span><i style="background:var(--ink)"></i>進場</span><span><i style="background:var(--accent)"></i>結帳</span><span>下方為轉換率</span></span></div><div class="chart" id="chWeek" aria-label="近七天進場與結帳"></div></div>
         </div>
         <div class="apanel" data-t="conv" hidden>
@@ -237,6 +244,8 @@
           <div class="inp search"><span class="pre"><svg class="i" style="width:16px"><use href="#search"/></svg></span><input id="evQ" placeholder="搜尋事件…" aria-label="搜尋事件"></div>
           <button class="btn ghost" id="evCsv"><svg class="i" style="width:16px"><use href="#download"/></svg>匯出</button>
         </div>
+        <section class="card evstrip" aria-label="今天的事件分布"><div class="card-h"><h3>今天的事件分布</h3><span class="lgd"><span><i style="background:var(--crit)"></i>嚴重</span><span><i style="background:var(--warn)"></i>警告</span><span><i style="background:var(--ink-4)"></i>紀錄</span></span></div>
+          <div class="ehist" id="evHist"></div><p class="note" id="evHistL"></p></section>
         <div class="card evcard"><div class="evlist" id="evList"></div></div>
       </section>
 

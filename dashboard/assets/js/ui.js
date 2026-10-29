@@ -77,11 +77,14 @@ const mxHTML=(v,lg)=>{const s=document.createElement('span');s.className='mx'+(l
 const OKSVG='<svg class="i okd" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
 /* ---------- sparkline (quiet: sunken area, ink line, accent end dot) ---------- */
+/* curve through points: quadratic segments via midpoints, so peaks stay where the data is */
+function smooth(pts){const f=p=>p[0].toFixed(1)+' '+p[1].toFixed(1);if(pts.length<3)return'M'+pts.map(f).join(' L');
+  let d='M'+f(pts[0]);for(let i=1;i<pts.length-1;i++){const m=[(pts[i][0]+pts[i+1][0])/2,(pts[i][1]+pts[i+1][1])/2];d+=` Q${f(pts[i])} ${f(m)}`}return d+' L'+f(pts.at(-1))}
 function spark(svg,vals,opt={}){
   const W=200,H=40,v=vals.map(x=>x==null?null:+x),ok=v.filter(x=>x!=null);if(ok.length<2){svg.innerHTML='';svg._v=null;return}
   const mx=opt.max??Math.max(...ok),mn=opt.min??Math.min(...ok),rg=mx-mn||1,n=v.length;
   const pts=v.map((x,i)=>x==null?null:[i/(n-1)*W,36-((x-mn)/rg)*30]).filter(Boolean);
-  const d='M'+pts.map(p=>p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' L');const e=pts.at(-1);
+  const d=smooth(pts),e=pts.at(-1);
   svg.innerHTML=`<path d="${d} L${e[0]} 40 L${pts[0][0]} 40Z" fill="var(--sunken)"/><path d="${d}" fill="none" stroke="${opt.color||'var(--ink)'}" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"/><circle cx="${e[0]}" cy="${e[1]}" r="3" fill="var(--accent)"/>`;
   svg._v={v,pts,n,fmt:opt.fmt,label:opt.label};
 }
@@ -111,8 +114,9 @@ function chart(el,spec){
   spec.x.forEach((lb,i)=>{if((n-1-i)%every===0){s+=`<text class="t" x="${X(i)}" y="${H-(spec.sub?24:8)}" text-anchor="middle">${esc(lb)}</text>`;if(spec.sub)s+=`<text class="t" x="${X(i)}" y="${H-8}" text-anchor="middle">${esc(spec.sub[i])}</text>`}});
   s+=`<rect class="band" data-r="band" x="0" y="${T}" width="0" height="${H-T-B}" rx="6" opacity="0"/>`;
   (spec.refs||[]).forEach(r=>{const y=Y(r.v);s+=`<line x1="${L}" x2="${W-Rr}" y1="${y}" y2="${y}" stroke="${r.color}" stroke-dasharray="5 4" stroke-width="1.5"/><text class="t" x="${W-Rr}" y="${y-6}" text-anchor="end" style="fill:${r.color}">${esc(r.label)}</text>`});
-  if(bar){const k=spec.series.length,inner=Math.min(bw*.56,56),w=Math.max(3,inner/k-3);
-    spec.series.forEach((se,j)=>se.values.forEach((v,i)=>{if(v==null)return;const x=L+bw*i+(bw-inner)/2+j*(inner/k),y=Y(v);s+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(0,Y(0)-y).toFixed(1)}" rx="${Math.min(4,w/2).toFixed(1)}" fill="${se.color}"/>`}))}
+  if(bar){const k=spec.series.filter(se=>!se.ghost).length,inner=Math.min(bw*.56,56),w=Math.max(3,inner/k-3);
+    // a ghost series (forecast) draws in the slot of the series it stands in for
+    spec.series.forEach((se,j)=>se.values.forEach((v,i)=>{if(v==null)return;const x=L+bw*i+(bw-inner)/2+(se.ghost?se.slot||0:j)*(inner/k),y=Y(v);s+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(0,Y(0)-y).toFixed(1)}" rx="${Math.min(4,w/2).toFixed(1)}" ${se.ghost?`fill="${se.color}" fill-opacity=".1" stroke="${se.color}" stroke-opacity=".45" stroke-dasharray="3 3"`:`fill="${se.color}"`}/>`}))}
   else spec.series.forEach((se,j)=>{const pts=se.values.map((v,i)=>v==null?null:[X(i),Y(v)]).filter(Boolean);if(!pts.length)return;
       const d='M'+pts.map(p=>p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' L');
       if(se.area)s+=`<path d="${d} L${pts.at(-1)[0].toFixed(1)} ${Y(0)} L${pts[0][0].toFixed(1)} ${Y(0)} Z" fill="${se.color}" opacity=".1"/>`;
@@ -132,7 +136,7 @@ function paintHi(el){
   else{xh.setAttribute('x1',x);xh.setAttribute('x2',x);xh.setAttribute('opacity',1);band.setAttribute('opacity',0);
     dots.innerHTML=sp.series.map(se=>se.values[i]==null?'':`<circle cx="${x}" cy="${g.Y(se.values[i])}" r="4.5" fill="${se.color}" stroke="${PAL.raised}" stroke-width="2"/>`).join('')}
   const head=sp.tipX?sp.tipX(i):sp.x[i];
-  tp.innerHTML=`<div class="h">${esc(head)}</div>`+sp.series.map(se=>`<div class="r"><i style="background:${se.color}"></i>${esc(se.name)}<b>${se.values[i]==null?'—':(se.fmt?se.fmt(se.values[i]):se.values[i])}</b></div>`).join('')+(sp.tipExtra?sp.tipExtra(i):'');
+  tp.innerHTML=`<div class="h">${esc(head)}</div>`+sp.series.filter(se=>!se.ghost||se.values[i]!=null).map(se=>`<div class="r"><i style="background:${se.color}${se.ghost?';opacity:.4':''}"></i>${esc(se.name)}<b>${se.values[i]==null?'—':(se.fmt?se.fmt(se.values[i]):se.values[i])}</b></div>`).join('')+(sp.tipExtra?sp.tipExtra(i):'');
   tp.hidden=false;const r=el.getBoundingClientRect(),px=x*(r.width/g.W),tw=tp.offsetWidth;tp.style.left=(px+14+tw>r.width?px-14-tw:px+14)+'px';
   el.setAttribute('aria-label',`${el._label}｜${head}：`+sp.series.map(se=>`${se.name} ${se.values[i]==null?'無資料':(se.fmt?se.fmt(se.values[i]):se.values[i])}`).join('，'));
 }
@@ -141,7 +145,11 @@ function paintHi(el){
 function placeThumb(seg){if(!seg)return;const on=seg.querySelector('[aria-pressed="true"]'),th=seg.querySelector('.thumb');if(!on||!th||!seg.offsetParent)return;th.style.left=on.offsetLeft+'px';th.style.width=on.offsetWidth+'px'}
 function setSeg(seg,pred){if(!seg)return;seg.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',!!pred(b)));placeThumb(seg)}
 document.addEventListener('click',e=>{const b=e.target.closest('.seg button');if(!b||b.disabled)return;const seg=b.closest('.seg');setSeg(seg,x=>x===b);seg.dispatchEvent(new CustomEvent('pick',{detail:b}))});
-const placeAll=()=>{$$('.seg').forEach(placeThumb);$$('.tabs').forEach(placeUl)};
+/* one accent bar that slides between rail links instead of each link drawing its own */
+function placeNav(){const a=$('.nav a[aria-current]'),ind=$('.navind');if(!a||!ind)return;const mob=matchMedia('(max-width:720px)').matches;
+  ind.classList.toggle('h',mob);ind.style.transform=mob?`translate(${a.offsetLeft+a.offsetWidth*.3}px,${a.offsetTop-7}px)`:`translateY(${a.offsetTop+10}px)`;
+  ind.style[mob?'width':'height']=(mob?a.offsetWidth*.4:a.offsetHeight-20)+'px';ind.style[mob?'height':'width']='';ind.classList.add('on')}
+const placeAll=()=>{$$('.seg').forEach(placeThumb);$$('.tabs').forEach(placeUl);placeNav()};
 addEventListener('resize',placeAll);document.fonts?.ready.then(placeAll);
 document.addEventListener('change',e=>{const s=e.target.closest('.switch');if(s)s.classList.add('is-init')});
 function placeUl(t){const on=t.querySelector('[aria-selected="true"]'),ul=t.querySelector('.ul');if(!on||!ul||!t.offsetParent)return;ul.style.left=on.offsetLeft+'px';ul.style.width=on.offsetWidth+'px'}

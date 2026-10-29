@@ -478,3 +478,63 @@ body{padding:0;margin:0;min-height:100vh}
 }
 .kpi .row .go{margin-left:auto;margin-right:8px;display:inline-flex}
 .rail{align-self:start}
+
+/* ---------- v2 polish: rail indicator, compact welcome, hero forecast, event strips ---------- */
+.nav{position:relative}
+.nav a[aria-current="page"]::before{display:none}
+.navind{position:absolute;left:-14px;top:0;width:3px;height:18px;border-radius:0 3px 3px 0;background:var(--accent);opacity:0;pointer-events:none;z-index:1;
+  transition:transform .38s var(--ease),height .38s var(--ease),width .38s var(--ease)}
+.navind.on{opacity:1}
+.navind.h{left:0;height:3px;border-radius:0 0 3px 3px}
+
+.welcome{grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;padding:10px 10px 10px 12px;border-radius:14px;margin-bottom:16px}
+.welcome .wi{width:32px;height:32px;border-radius:9px}
+.welcome p{margin:0;font-size:13px;line-height:19px}
+.welcome p b{font-size:13.5px;margin-right:8px;color:var(--ink)}
+.welcome .row{gap:4px;flex-wrap:nowrap}
+
+.hero-l{position:relative;z-index:1;display:flex;flex-direction:column;min-width:0}
+.hero-l>.sub{margin-bottom:18px}
+.hero .lim-note{position:static;align-self:flex-start;margin:-6px 0 18px}
+.hk{display:grid;grid-template-columns:repeat(3,auto);justify-content:start;gap:24px;margin-top:auto;padding-top:16px;border-top:1px solid rgba(243,240,234,.1)}
+.hk b{display:block;font-family:var(--mono);font-size:17px;line-height:24px;font-weight:500;color:#F3F0EA;margin-top:3px;white-space:nowrap}
+.hk b small{font-size:11px;color:rgba(243,240,234,.5);margin:0 6px 0 2px}
+.hk b.zero{color:#FF8A5C}
+.flowkey i.f{background:none;border-top:2px dotted var(--accent)}
+.hero .flow-wrap .now{position:absolute;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px rgba(255,90,31,.25);pointer-events:none;transition:top .5s var(--ease)}
+.lgd i.ghost{box-sizing:border-box;background:none;border:1.5px dashed var(--ink-4)}
+
+.todo{display:flex;flex-direction:column}
+.todo .list{min-height:0;margin-bottom:14px}
+.todo-sum{margin-top:auto;padding-top:14px;border-top:1px solid var(--line)}
+.dev{display:flex;flex-direction:column}
+.dev-sum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:auto;padding-top:14px;border-top:1px solid var(--line)}
+.dev .uptime-l{margin-bottom:18px}
+.dev-sum b{display:block;font-family:var(--mono);font-size:16px;line-height:22px;font-weight:500;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dev-sum b small{font-size:11px;color:var(--ink-4);margin-left:4px}
+.ts-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:8px;font-size:12px;color:var(--ink-3)}
+
+.ehist{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:6px;height:96px;margin-top:4px}
+.ehist.mini{height:54px;gap:4px}
+.eh{display:grid;grid-template-rows:minmax(0,1fr) auto;gap:4px;min-width:0;padding:0;border:0;background:none;font:inherit;color:inherit;cursor:pointer}
+.eh .eb{display:flex;flex-direction:column-reverse;gap:1px;border-radius:5px;background:var(--sunken);overflow:hidden;transition:box-shadow .2s var(--ease)}
+.eh .eb i{display:block;flex:none;transition:height .4s var(--ease)}
+.eh .eb i.crit{background:var(--crit)}.eh .eb i.warn{background:var(--warn)}.eh .eb i.info{background:var(--ink-4)}
+.eh small{font-family:var(--mono);font-size:10.5px;line-height:12px;color:var(--ink-4);text-align:center}
+.ehist.mini small{font-size:9.5px}
+.eh:hover .eb{box-shadow:0 0 0 1.5px var(--ink-4)}
+.eh.on .eb{box-shadow:0 0 0 2px var(--ink)}
+.eh.on small{color:var(--ink);font-weight:600}
+.eh.f{cursor:default}.eh.f .eb{background:repeating-linear-gradient(135deg,var(--sunken) 0 3px,transparent 3px 6px);box-shadow:none}
+.eh:focus-visible{outline:none}.eh:focus-visible .eb{box-shadow:0 0 0 2px var(--accent)}
+.evstrip{margin:0}
+.evstrip .note{margin-top:10px}
+.evstrip .note .link{font:inherit;font-weight:600;color:var(--ink);margin-left:6px;background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+@media (max-width:720px){
+  .welcome{grid-template-columns:minmax(0,1fr)}
+  .welcome .row{justify-content:flex-start}
+  .hk{gap:16px}
+  .hk b{font-size:15px}
+  .ehist{gap:3px}
+  .eh small{font-size:9px}
+}

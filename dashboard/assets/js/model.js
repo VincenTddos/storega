@@ -30,7 +30,7 @@ let S;
 function freshState(){
   R=mulberry32(20261028);
   const nodes={};
-  NODE_DEFS.forEach((d,i)=>nodes[d.id]={...d,rssi:-50-i*4,rssiHist:[],lastSeen:OPEN,online:true,fault:false,rebootUntil:0,blinkUntil:0,boot:OPEN-3600*3-i*977,confirmUntil:0});
+  NODE_DEFS.forEach((d,i)=>nodes[d.id]={...d,rssi:-48-i*6,rssi0:-48-i*6,rssiHist:[],lastSeen:OPEN,online:true,fault:false,rebootUntil:0,blinkUntil:0,boot:OPEN-3600*3-i*977,confirmUntil:0});
   const zones={};ZONES.forEach(z=>zones[z.id]={truth:0,raw:0,est:0,presence:false,moving:false,dwellSum:0,dwellN:0,stale:false,hist:[]});
   const hourly=Array.from({length:12},(_,i)=>({h:10+i,entries:0,checkouts:0,errRaw:0,errEst:0,base:0,zsum:{A:0,B:0,C:0,D:0},zn:0}));
   const wr=mulberry32(7741),days=[],d0=new Date();d0.setHours(12,0,0,0);const wk='日一二三四五六';
@@ -85,7 +85,7 @@ function sample(){
   const now=performance.now();
   for(const d of NODE_DEFS){
     const n=S.nodes[d.id];if(n.fault||n.rebootUntil>now)continue;
-    n.lastSeen=S.t;n.rssi=clamp(Math.round(n.rssi+(R()-.5)*4),-82,-41);
+    n.lastSeen=S.t;n.rssi=clamp(Math.round(n.rssi+(R()-.5)*4+(n.rssi0-n.rssi)*.08),-82,-41);
     if(d.id==='entry-01'){S.temp=clamp(S.temp+(R()-.5)*.12+(occ()/S.capacity-.5)*.02,22,33);S.hum=clamp(S.hum+(R()-.5)*.6,45,75);continue}
     const zid=d.id.slice(-1),z=S.zones[zid],zd=ZMAP[zid];
     let raw=z.truth*(1.45+R()*.3)+poisson(.8);

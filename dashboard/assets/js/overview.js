@@ -3,6 +3,11 @@ const OV={todoVer:-1,lastEntries:null,mapHl:null,booted:false};
 const YK=()=>S.days.at(-1);
 /* expected occupancy for yesterday at time t (same arrival curve, yesterday's volume, ~14 min average stay) */
 const yOcc=t=>lam(t/3600)*YK().entries/CUM[720]*14;
+/* next 30 minutes: yesterday's curve shape scaled to today's volume, starting from the current count; the gate caps it */
+const fcRatio=()=>{const yn=yesterdayNow();return yn>5?clamp(S.today.entries/yn,.5,2):1};
+const fcOcc=(t0,o0,t)=>clamp(Math.round(o0+(yOcc(t)-yOcc(t0))*fcRatio()),0,S.capacity);
+/* people in and out over the 15 minutes before series index i */
+function paceAt(i){const s=S.series;if(i==null||i<1)return null;const a=s[Math.max(0,i-15)],b=s[i],inn=b.entries-a.entries;return{inn,out:Math.max(0,inn-(b.occ-a.occ))}}
 
 function ovHeadline(){
   const sn=snap(),o=vOcc(),cap=vCap(),r=o/cap,offline=NODE_DEFS.filter(d=>!S.nodes[d.id].online).length;
@@ -33,23 +38,45 @@ function ovHero(){
   $('#fK').innerHTML=`k ${S.k.toFixed(2)}<small>${S.kAuto?'自動':'手動'}</small>`;
   const hero=$('.hero'),at=r>=.8&&!sn;if(at!==hero.classList.contains('at-lim')){hero.classList.toggle('at-lim',at);beam(hero,'run',at)}
   $('#limNote').innerHTML=`${mxHTML('pulse')}${r>=1?'已達上限 · 閘門已關閉':'已達 80% · 自動限流待命'}`;
-  // flow: last 90 minutes vs yesterday
-  const s=S.series.slice(-90),W=300,H=84,mx=Math.max(cap*1.05,...s.map(p=>p.occ),10);
-  if(s.length>1){const X=i=>i/(s.length-1)*W,Y=v=>H-4-v/mx*(H-10);
-    const d='M'+s.map((p,i)=>X(i).toFixed(1)+' '+Y(p.occ).toFixed(1)).join(' L'),yd='M'+s.map((p,i)=>X(i).toFixed(1)+' '+Y(yOcc(p.t)).toFixed(1)).join(' L');
+  const left=Math.max(0,cap-o),pc=paceAt(sn?replayIdx:S.series.length-1);
+  $('#hkLeft').innerHTML=`${left}<small>人</small>`;$('#hkLeft').classList.toggle('zero',!left);
+  $('#hkPace').innerHTML=pc?`+${pc.inn}<small>進</small> −${pc.out}<small>出</small>`:'—';
+  $('#hkFc').innerHTML=sn?'—':`約 ${fcOcc(S.t,o,S.t+1800)}<small>人</small>`;
+  // flow: last 90 minutes vs yesterday, then a dashed forecast for the next 30
+  const s=S.series.slice(-90),W=300,H=84,PW=W*.75,FM=30,mx=Math.max(cap*1.05,...s.map(p=>p.occ),10);
+  if(s.length>1){const X=i=>i/(s.length-1)*PW,XF=m=>PW+m/FM*(W-PW),Y=v=>H-4-v/mx*(H-10),t0=S.t,o0=occ();
+    const fc=Array.from({length:FM/3+1},(_,k)=>fcOcc(t0,o0,t0+k*180));
+    const d='M'+s.map((p,i)=>X(i).toFixed(1)+' '+Y(p.occ).toFixed(1)).join(' L'),
+      yd='M'+s.map((p,i)=>X(i).toFixed(1)+' '+Y(yOcc(p.t)).toFixed(1)).concat(fc.map((_,k)=>XF(k*3).toFixed(1)+' '+Y(yOcc(t0+k*180)).toFixed(1))).join(' L'),
+      fd=`M${PW} ${Y(o0).toFixed(1)} L`+fc.map((v,k)=>XF(k*3).toFixed(1)+' '+Y(v).toFixed(1)).join(' L');
     const cy=Y(cap*.8);$('#flow').innerHTML=`<defs><linearGradient id="fg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FF5A1F" stop-opacity=".45"/><stop offset="1" stop-color="#FF5A1F" stop-opacity="0"/></linearGradient></defs>
+      <rect x="${PW}" y="0" width="${W-PW}" height="${H}" fill="rgba(243,240,234,.035)"/><line x1="${PW}" x2="${PW}" y1="0" y2="${H}" stroke="rgba(243,240,234,.22)" vector-effect="non-scaling-stroke"/>
       <line x1="0" x2="${W}" y1="${cy}" y2="${cy}" stroke="rgba(243,240,234,.25)" stroke-dasharray="3 4"/><path d="${yd}" fill="none" stroke="rgba(243,240,234,.35)" stroke-width="1.4" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"/>
-      <path d="${d} L${W} ${H} L0 ${H}Z" fill="url(#fg)"/><path d="${d}" fill="none" stroke="#FF5A1F" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="${W}" cy="${Y(s.at(-1).occ)}" r="3.5" fill="#FF5A1F"/>`;
-    $('#flow')._s=s}
+      <path d="${d} L${PW} ${H} L0 ${H}Z" fill="url(#fg)"/><path d="${fd}" fill="none" stroke="#FF5A1F" stroke-opacity=".6" stroke-width="1.6" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/>
+      <path d="${d}" fill="none" stroke="#FF5A1F" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+    $('#flow')._s=s;$('#flow')._fc={t0,fc};
+    // the "now" dot is HTML so it stays round when the SVG stretches
+    const fw=$('.flow-wrap');let dot=fw.querySelector('.now');if(!dot){dot=document.createElement('span');dot.className='now';fw.appendChild(dot)}dot.style.cssText=`left:75%;top:${(Y(s.at(-1).occ)/H*100).toFixed(1)}%`}
 }
 function ovFlowHover(){const fw=$('.flow-wrap'),hov=document.createElement('span');hov.className='hov';fw.appendChild(hov);
-  fw.addEventListener('pointermove',e=>{const s=$('#flow')._s;if(!s)return;const r=fw.getBoundingClientRect(),n=s.length,i=clamp(Math.round((e.clientX-r.left)/r.width*(n-1)),0,n-1),p=s[i],y=Math.round(yOcc(p.t)),d=p.occ-y;
-    hov.style.cssText=`left:${i/(n-1)*r.width}px;top:0;height:${r.height}px`;hov.classList.add('on');
-    showTip(r.left+i/(n-1)*r.width,r.top,`<small>${hhmm(p.t)}</small><span class="sw2" style="background:var(--accent)"></span>今天 <b>${p.occ}</b> 人　<span style="opacity:.6">昨天約 ${y}（${d>=0?'+':''}${d}）</span>`)});
+  fw.addEventListener('pointermove',e=>{const s=$('#flow')._s,F=$('#flow')._fc;if(!s)return;const r=fw.getBoundingClientRect(),f=clamp((e.clientX-r.left)/r.width,0,1);let x,html;
+    if(f<=.75){const n=s.length,i=clamp(Math.round(f/.75*(n-1)),0,n-1),p=s[i],y=Math.round(yOcc(p.t)),d=p.occ-y;x=i/(n-1)*.75;
+      html=`<small>${hhmm(p.t)}</small><span class="sw2" style="background:var(--accent)"></span>今天 <b>${p.occ}</b> 人　<span style="opacity:.6">昨天約 ${y}（${d>=0?'+':''}${d}）</span>`}
+    else{const k=clamp(Math.round((f-.75)/.25*(F.fc.length-1)),0,F.fc.length-1),t=F.t0+k*180;x=.75+k/(F.fc.length-1)*.25;
+      html=`<small>${hhmm(t)} · 預測</small><span class="sw2" style="background:var(--accent);opacity:.6"></span>約 <b>${F.fc[k]}</b> 人　<span style="opacity:.6">依昨天同時段的走勢推算</span>`}
+    hov.style.cssText=`left:${x*r.width}px;top:0;height:${r.height}px`;hov.classList.add('on');showTip(r.left+x*r.width,r.top,html)});
   fw.addEventListener('pointerleave',()=>{hov.classList.remove('on');hideTip()})}
 
+/* rolling 15-minute windows ending now, so the KPI sparklines have shape long before the first full hour */
+function windows15(){const s=S.series,out=[];
+  for(let e=s.length-1;e-15>=0&&out.length<48;e-=15){const a=s[e-15],b=s[e],seg=s.slice(e-14,e+1);let o=0,ee=0;
+    for(const p of seg){let est=0;for(const v of Object.values(p.zones))if(!v[3])est+=v[2];o+=p.occ;ee+=Math.abs(est-p.occ)}
+    out.unshift({t0:a.t,t1:b.t,ent:b.entries-a.entries,ck:b.checkouts,cent:b.entries,occ:o/seg.length,acc:o?Math.max(0,1-ee/o)*100:null})}
+  // Little's law over 30 minutes: average people inside ÷ arrivals per minute
+  out.forEach((w,i)=>{const p=out[i-1],ent=w.ent+(p?p.ent:0),o=p?(w.occ+p.occ)/2:w.occ,mins=p?30:15;w.dw=ent>=3?o/(ent/mins):null});
+  return out}
 function ovKpis(first){
-  const t=S.today,ent=t.entries,conv=ent?t.checkouts/ent*100:0,dw=dwellMin(),acc=accNow()*100,y=YK(),yn=yesterdayNow(),cur=Math.floor(S.t/3600);
+  const t=S.today,ent=t.entries,conv=ent?t.checkouts/ent*100:0,dw=dwellMin(),acc=accNow()*100,y=YK(),yn=yesterdayNow();
   const vals=[[$('#kIn'),String(ent)],[$('#kConv'),conv.toFixed(1)],[$('#kDwell'),dw.toFixed(1)],[$('#kAcc'),acc.toFixed(1)]];
   vals.forEach(([el,v])=>first?odo(el,v):setVal(el,v));
   const delta=(el,d,unit,dec=1,goodUp=true)=>{if(!isFinite(d)){el.textContent='';return}const up=d>=0;el.className='delta '+((up===goodUp)?'up':'down');el.textContent=`${up?'▲':'▼'} ${Math.abs(d).toFixed(dec)}${unit}`};
@@ -58,11 +85,11 @@ function ovKpis(first){
   const top=ZONES.map(z=>[z,S.zones[z.id]]).filter(([,z])=>z.dwellN).map(([zd,z])=>[zd,z.dwellSum/z.dwellN/60]).sort((a,b)=>b[1]-a[1])[0];
   delta($('#kDwellD'),dw?dw-15.6:NaN,' 分');$('#kDwellC').textContent=top?`${top[0].name}最久 ${top[1].toFixed(1)} 分`:'等待第一位顧客離場';
   delta($('#kAccD'),acc?acc-accRaw()*100:NaN,' pt');$('#kAccC').textContent=`校正前 ${pct1(accRaw())}%`;
-  const hrs=S.hourly.filter(h=>h.h<=cur),lbl=i=>`${pad(hrs[i].h)}:00 – ${pad(hrs[i].h+1)}:00`;
-  spark($('#sIn'),hrs.map(h=>h.entries),{fmt:v=>`<b>${v}</b> 人進場`,label:lbl});
-  spark($('#sConv'),hrs.map(h=>h.entries?h.checkouts/h.entries*100:null),{fmt:v=>`轉換率 <b>${v.toFixed(1)}%</b>`,label:lbl});
-  spark($('#sDwell'),hrs.map(h=>h.dn?h.dw/h.dn/60:null),{fmt:v=>`平均 <b>${v.toFixed(1)}</b> 分`,label:lbl});
-  spark($('#sAcc'),hrs.map(h=>h.base?Math.max(0,100*(1-h.errEst/h.base)):null),{fmt:v=>`準確度 <b>${v.toFixed(1)}%</b>`,label:lbl});
+  const w=windows15(),lbl=i=>`${hhmm(w[i].t0)} – ${hhmm(w[i].t1)}`;
+  spark($('#sIn'),w.map(x=>x.ent),{fmt:v=>`<b>${v}</b> 人進場`,label:lbl});
+  spark($('#sConv'),w.map(x=>x.cent?x.ck/x.cent*100:null),{fmt:v=>`累計轉換率 <b>${v.toFixed(1)}%</b>`,label:i=>`截至 ${hhmm(w[i].t1)}`});
+  spark($('#sDwell'),w.map(x=>x.dw),{fmt:v=>`估計停留 <b>${v.toFixed(1)}</b> 分`,label:lbl});
+  spark($('#sAcc'),w.map(x=>x.acc),{fmt:v=>`準確度 <b>${v.toFixed(1)}%</b>`,label:lbl});
   ['#sIn','#sConv','#sDwell','#sAcc'].forEach(s=>hoverSpark($(s)));
 }
 
@@ -103,6 +130,9 @@ function ovDevices(){
   $('#devs').innerHTML=NODE_DEFS.map(d=>{const n=S.nodes[d.id],reb=n.rebootUntil>now,b=n.online?(n.rssi>-55?4:n.rssi>-65?3:n.rssi>-75?2:1):0;if(n.online)on++;
     return`<div class="chipdev ${n.online?'':'off'} ${reb?'reb':''}" tabindex="0" data-tt="<small>${d.id} · ${d.role}</small>${reb?'重新開機中…':n.online?`訊號 <b>${n.rssi} dBm</b> · 運行 ${dur(S.t-n.boot)}`:`${Math.round(S.t-n.lastSeen)} 秒沒有心跳`}"><span class="d"><i></i>${d.id.replace('-01','')}</span><span class="bars">${[5,8,11,14].map((h,i)=>`<i style="height:${h}px" class="${i<b?'on':''}"></i>`).join('')}</span><small>${reb?'重開中':n.online?n.rssi+' dBm':'離線'}</small></div>`}).join('');
   const c=$('#devChip');c.className='chip '+(on===5?'ok':on>=3?'warn':'crit');c.innerHTML=`<i></i>${on} / 5 在線`;
+  const onl=NODE_DEFS.map(d=>S.nodes[d.id]).filter(n=>n.online),avg=Math.round(onl.reduce((a,n)=>a+n.rssi,0)/Math.max(1,onl.length)),
+    offs=S.alerts.filter(a=>a.level==='crit'&&a.target?.node),last=offs[0],good=S.upt.filter(v=>v===0).length,done=S.upt.length;
+  $('#devSum').innerHTML=`<div><span class="label">平均訊號</span><b>${onl.length?avg:'—'}<small>dBm</small></b></div><div><span class="label">全部在線</span><b>${done?Math.round(good/done*100):100}<small>% 時段</small></b></div><div><span class="label">最近離線</span><b>${last?`${hhmm(last.t)}<small>${last.target.node}</small>`:'今天沒有'}</b></div>`;
   const cur=Math.floor((S.t-OPEN)/900);
   $('#uptime').innerHTML=Array.from({length:48},(_,i)=>{const v=i<cur?(S.upt[i]??0):i===cur?S.uptCur:null,m=OPEN/60+i*15,lbl=`${pad(m/60|0)}:${pad(m%60)}–${pad((m+15)/60|0)}:${pad((m+15)%60)}`;
     return`<i class="${v==null?'f':v===2?'c':v===1?'w':''}" data-tt="<small>${lbl}</small>${v==null?'尚未發生':v===2?'有節點離線':v===1?'訊號偏弱或重開機':'5 / 5 在線'}"></i>`}).join('');
@@ -151,8 +181,12 @@ function ovLegend(){
   $('#zleg').innerHTML=ZONES.map(z=>`<button data-z="${z.id}" aria-pressed="${OV.mapHl===z.id}"><span><i style="background:var(--z${z.id})"></i>${z.id} ${z.name}</span><b id="zc-${z.id}">0</b></button>`).join('');
   $('#zleg').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;OV.mapHl=OV.mapHl===b.dataset.z?null:b.dataset.z;$$('#zleg button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.z===OV.mapHl))})}
 
+/* bottom of the todo card: today's alerts at a glance; a column opens the events page filtered to that hour */
+function ovTodoSum(){const k=S.alertVer+'|'+Math.floor(S.t/3600);if(OV.sumKey===k)return;OV.sumKey=k;
+  const A=S.alerts.filter(a=>a.level!=='info'),done=A.filter(a=>a.ack).length,crit=A.filter(a=>a.level==='crit').length;
+  $('#todoSum').innerHTML=`<div class="ts-h"><span class="label">今天的告警</span><span class="mono">${A.length} 則 · 已處理 ${done}${crit?` · 嚴重 ${crit}`:''}</span></div><div class="ehist mini">${evStripHTML(null)}</div>`}
 function renderOverview(){
-  ovHeadline();ovHero();ovKpis(false);ovDevices();if(!OV.busy)renderTodo();ovPredict();
+  ovHeadline();ovHero();ovKpis(false);ovDevices();if(!OV.busy)renderTodo();ovTodoSum();ovPredict();
   ZONES.forEach(z=>{const v=zoneVals(z);popNum($('#zc-'+z.id),v.stale?'—':v.est)});syncDots();
   const e=S.today.entries;if(OV.lastEntries!=null&&e>OV.lastEntries&&!snap()&&!RM)ripples.push(performance.now());OV.lastEntries=e;
 }
@@ -164,6 +198,7 @@ function initOverview(){
     const ack=e.target.closest('[data-ack]'),sn=e.target.closest('[data-snooze]');if(!ack&&!sn||!a)return;
     li.classList.add('leaving');setTimeout(()=>{if(ack)a.ack=true;else a.snooze=S.t+1800;S.alertVer++;renderTodo(true);renderBadges();
       toast('ok',ack?'已標記為處理':'30 分鐘後再提醒你',a.title,{label:'復原',fn:()=>{a.ack=false;a.snooze=0;S.alertVer++;renderTodo(true);renderBadges()}})},280)});
+  $('#todoSum').addEventListener('click',e=>{const b=e.target.closest('.eh');if(!b||b.disabled)return;EV.h=+b.dataset.h;go('events')});
   $('#expMain').onclick=()=>exportData(OV.fmt||'CSV');
   bindPop($('#expMore'),$('#expMenu'));
   $('#expMenu').addEventListener('click',e=>{const mi=e.target.closest('.mi');if(!mi)return;OV.fmt=mi.dataset.f;closePops();morph($('#expLbl'),'匯出 '+OV.fmt)});
