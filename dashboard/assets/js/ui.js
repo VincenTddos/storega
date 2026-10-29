@@ -145,12 +145,16 @@ function paintHi(el){
 function placeThumb(seg){if(!seg)return;const on=seg.querySelector('[aria-pressed="true"]'),th=seg.querySelector('.thumb');if(!on||!th||!seg.offsetParent)return;th.style.left=on.offsetLeft+'px';th.style.width=on.offsetWidth+'px'}
 function setSeg(seg,pred){if(!seg)return;seg.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',!!pred(b)));placeThumb(seg)}
 document.addEventListener('click',e=>{const b=e.target.closest('.seg button');if(!b||b.disabled)return;const seg=b.closest('.seg');setSeg(seg,x=>x===b);seg.dispatchEvent(new CustomEvent('pick',{detail:b}))});
-/* one accent bar that slides between rail links instead of each link drawing its own */
-function placeNav(){const a=$('.nav a[aria-current]'),ind=$('.navind');if(!a||!ind)return;const mob=matchMedia('(max-width:720px)').matches;
-  ind.classList.toggle('h',mob);ind.style.transform=mob?`translate(${a.offsetLeft+a.offsetWidth*.3}px,${a.offsetTop-7}px)`:`translateY(${a.offsetTop+10}px)`;
-  ind.style[mob?'width':'height']=(mob?a.offsetWidth*.4:a.offsetHeight-20)+'px';ind.style[mob?'height':'width']='';ind.classList.add('on')}
+/* the active pill (background + accent bar) is one element that slides between rail links;
+   it only animates on a page change, and follows layout changes (collapse, resize) without lag */
+let navKey='';
+function placeNav(anim=false){const a=$('.nav a[aria-current]'),ind=$('.navind');if(!a||!ind)return;
+  const mob=matchMedia('(max-width:720px)').matches,k=[a.offsetLeft,a.offsetTop,a.offsetWidth,a.offsetHeight,mob].join();if(k===navKey)return;navKey=k;
+  ind.classList.toggle('still',!anim||RM);ind.classList.toggle('h',mob);
+  ind.style.cssText=`transform:translate(${a.offsetLeft}px,${a.offsetTop}px);width:${a.offsetWidth}px;height:${a.offsetHeight}px`;ind.classList.add('on')}
 const placeAll=()=>{$$('.seg').forEach(placeThumb);$$('.tabs').forEach(placeUl);placeNav()};
 addEventListener('resize',placeAll);document.fonts?.ready.then(placeAll);
+if(window.ResizeObserver)new ResizeObserver(()=>placeNav()).observe(document.querySelector('.nav'));
 document.addEventListener('change',e=>{const s=e.target.closest('.switch');if(s)s.classList.add('is-init')});
 function placeUl(t){const on=t.querySelector('[aria-selected="true"]'),ul=t.querySelector('.ul');if(!on||!ul||!t.offsetParent)return;ul.style.left=on.offsetLeft+'px';ul.style.width=on.offsetWidth+'px'}
 

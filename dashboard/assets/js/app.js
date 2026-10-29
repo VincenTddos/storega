@@ -7,7 +7,7 @@ function go(h){if(location.hash.slice(1)===h)route();else location.hash=h}
 function route(){
   const [p,sub]=location.hash.slice(1).split('/'),nv=PAGES[p]?p:'overview',changed=nv!==view;view=nv;
   $$('.page').forEach(s=>s.classList.toggle('on',s.id==='p-'+view));
-  $$('.nav a').forEach(a=>a.toggleAttribute('aria-current',a.dataset.page===view));$('.nav a[aria-current]')?.setAttribute('aria-current','page');
+  $$('.nav a').forEach(a=>a.toggleAttribute('aria-current',a.dataset.page===view));$('.nav a[aria-current]')?.setAttribute('aria-current','page');placeNav(true);
   $('#crumb').textContent=PAGES[view];document.title=`${PAGES[view]} · StoreGA`;closePops();closePal();hideTip();
   if(view==='settings')setSettingsSub(sub);
   if(view==='live')initTwin().then(()=>window.twin?.resize());

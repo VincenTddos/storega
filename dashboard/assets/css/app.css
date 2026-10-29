@@ -481,11 +481,19 @@ body{padding:0;margin:0;min-height:100vh}
 
 /* ---------- v2 polish: rail indicator, compact welcome, hero forecast, event strips ---------- */
 .nav{position:relative}
+.nav a{z-index:1}
+.nav a[aria-current="page"],.nav a[aria-current="page"]:hover{background:transparent;box-shadow:none}
 .nav a[aria-current="page"]::before{display:none}
-.navind{position:absolute;left:-14px;top:0;width:3px;height:18px;border-radius:0 3px 3px 0;background:var(--accent);opacity:0;pointer-events:none;z-index:1;
-  transition:transform .38s var(--ease),height .38s var(--ease),width .38s var(--ease)}
+.navind{position:absolute;left:0;top:0;border-radius:9px;background:var(--raised);box-shadow:var(--shadow-1),0 0 0 1px var(--line);opacity:0;pointer-events:none;z-index:0;
+  transition:transform .32s var(--ease),width .32s var(--ease),height .32s var(--ease)}
+.navind::before{content:"";position:absolute;left:-14px;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--accent)}
+.navind.h::before{left:30%;right:30%;top:-7px;bottom:auto;width:auto;height:3px;border-radius:0 0 3px 3px}
 .navind.on{opacity:1}
-.navind.h{left:0;height:3px;border-radius:0 0 3px 3px}
+.navind.still{transition:none}
+/* collapsed rail: the user row stays at the bottom, avatar above the expand button */
+.app.mini .me{margin-top:auto;flex-direction:column;gap:6px;padding:10px 0 2px}
+@media (max-width:1180px){.me{margin-top:auto;padding:10px 0 2px}}
+@media (prefers-reduced-motion:reduce){.navind{transition:none}}
 
 .welcome{grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;padding:10px 10px 10px 12px;border-radius:14px;margin-bottom:16px}
 .welcome .wi{width:32px;height:32px;border-radius:9px}
