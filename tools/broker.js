@@ -4,7 +4,7 @@
      WS   ws://localhost:8080     ← the dashboard's MQTT connection (設定 → 資料來源)
    Usage: node broker.js [--mqtt 1883] [--http 8080] [--quiet]                                   */
 const net=require('net'),http=require('http'),fs=require('fs'),path=require('path');
-const aedes=require('aedes')(),ws=require('websocket-stream');
+const {Aedes}=require('aedes'),{WebSocketServer,createWebSocketStream}=require('ws');
 
 function arg(name,def){const i=process.argv.indexOf('--'+name);return i>0?process.argv[i+1]:def}
 const MQTT_PORT=+arg('mqtt',process.env.MQTT_PORT||1883),HTTP_PORT=+arg('http',process.env.HTTP_PORT||8080),QUIET=process.argv.includes('--quiet');
@@ -12,7 +12,8 @@ const ROOT=path.join(__dirname,'..','dashboard');
 const TYPES={'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript','.json':'application/json','.svg':'image/svg+xml','.png':'image/png'};
 const log=(...a)=>{if(!QUIET)console.log(new Date().toTimeString().slice(0,8),...a)};
 
-function startBroker({mqttPort=MQTT_PORT,httpPort=HTTP_PORT}={}){
+async function startBroker({mqttPort=MQTT_PORT,httpPort=HTTP_PORT}={}){
+  const aedes=await Aedes.createBroker();
   const tcp=net.createServer(aedes.handle);
   const web=http.createServer((req,res)=>{
     const u=decodeURIComponent(req.url.split('?')[0]),f=path.normalize(path.join(ROOT,u==='/'?'index.html':u));
@@ -20,7 +21,7 @@ function startBroker({mqttPort=MQTT_PORT,httpPort=HTTP_PORT}={}){
     fs.readFile(f,(err,buf)=>{if(err){res.writeHead(404,{'content-type':'text/plain; charset=utf-8'}).end('找不到 '+u);return}
       res.writeHead(200,{'content-type':TYPES[path.extname(f)]||'application/octet-stream','cache-control':'no-store'}).end(buf)});
   });
-  ws.createServer({server:web},aedes.handle);
+  new WebSocketServer({server:web}).on('connection',(sock,req)=>{const stream=createWebSocketStream(sock);stream.on('error',()=>{});aedes.handle(stream,req)});
   aedes.on('client',c=>log('＋ 連線',c.id));
   aedes.on('clientDisconnect',c=>log('－ 離線',c.id));
   aedes.on('subscribe',(subs,c)=>log('  訂閱',c?.id,subs.map(s=>s.topic).join(', ')));
