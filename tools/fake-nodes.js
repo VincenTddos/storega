@@ -36,7 +36,7 @@ function step(s,dt){
     if(a.zone==null&&a.i<a.plan.length){a.zone=a.plan[a.i];const[lo,hi]=ZONES[a.zone].dwell;a.until=s.t+lo+Math.random()*(hi-lo);a.moving=Math.random()<.6}
     else if(a.zone){if(a.zone==='D')s.checkout++;a.zone=null;a.i++;a.until=s.t+(a.i<a.plan.length?15+Math.random()*30:20+Math.random()*25)}
     else{s.agents.splice(i,1);s.out++;s.dwellSum+=s.t-a.entered;s.dwellN++}}
-  s.temp=clamp(s.temp+(Math.random()-.5)*.05*dt+(occupancy(s)/s.capacity-.5)*.004*dt,21,33);s.hum=clamp(s.hum+(Math.random()-.5)*.2*dt,45,75);
+  s.temp=clamp(s.temp+((23.2+3.5*occupancy(s)/s.capacity)-s.temp)*Math.min(1,.002*dt)+(Math.random()-.5)*.02*dt,21,33);  /* drifts toward a crowd-dependent target */s.hum=clamp(s.hum+(Math.random()-.5)*.2*dt,45,75);
 }
 /* what each board would publish right now */
 function payloads(s,id){

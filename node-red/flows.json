@@ -1,0 +1,427 @@
+[
+  {
+    "id": "sga_tab",
+    "type": "tab",
+    "label": "StoreGA",
+    "info": "ESP32 → Aedes → 融合 / 規則 → 儀表板。說明見 repo 的 node-red/README.md。"
+  },
+  {
+    "id": "c_title",
+    "type": "comment",
+    "z": "sga_tab",
+    "name": "StoreGA：MQTT broker、感測融合、心跳、自動校正、整點紀錄",
+    "info": "所有主題格式見 docs/mqtt.md",
+    "x": 330,
+    "y": 20,
+    "wires": []
+  },
+  {
+    "id": "sga_broker",
+    "type": "aedes broker",
+    "z": "sga_tab",
+    "name": "Aedes（1883 / ws 8080）",
+    "mqtt_port": 1883,
+    "mqtt_ws_bind": "port",
+    "mqtt_ws_port": 8080,
+    "mqtt_ws_path": "",
+    "cert": "",
+    "key": "",
+    "certname": "",
+    "keyname": "",
+    "persistence_bind": "memory",
+    "dburl": "",
+    "usetls": false,
+    "x": 180,
+    "y": 140,
+    "wires": [
+      [
+        "d_events"
+      ],
+      []
+    ]
+  },
+  {
+    "id": "d_events",
+    "type": "debug",
+    "z": "sga_tab",
+    "name": "連線事件",
+    "active": false,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "x": 460,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "sga_client",
+    "type": "mqtt-broker",
+    "name": "StoreGA 本機 broker",
+    "broker": "localhost",
+    "port": "1883",
+    "clientid": "node-red-storega",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "birthTopic": "sga/system/online",
+    "birthQos": "0",
+    "birthRetain": "true",
+    "birthPayload": "{\"online\":true}",
+    "birthMsg": {},
+    "closeTopic": "",
+    "closeQos": "0",
+    "closePayload": "",
+    "closeMsg": {},
+    "willTopic": "sga/system/online",
+    "willQos": "0",
+    "willRetain": "true",
+    "willPayload": "{\"online\":false}",
+    "willMsg": {},
+    "userProps": "",
+    "sessionExpiry": ""
+  },
+  {
+    "id": "m_in",
+    "type": "mqtt in",
+    "z": "sga_tab",
+    "name": "所有節點 sga/+/+",
+    "topic": "sga/+/+",
+    "qos": "0",
+    "datatype": "json",
+    "broker": "sga_client",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 160,
+    "y": 220,
+    "wires": [
+      [
+        "f_fusion"
+      ]
+    ]
+  },
+  {
+    "id": "f_fusion",
+    "type": "function",
+    "z": "sga_tab",
+    "name": "感測融合與規則",
+    "func": "// 感測融合：收下所有 sga/+/+ 訊息，算出每區的校正後人數，檢查規則並發出告警\n// 輸出 1 → sga/system/state（整店狀態，retain）  輸出 2 → sga/system/alert  輸出 3 → 下行指令（msg.topic 已設好）\nconst NODES = ['entry-01', 'zone-A', 'zone-B', 'zone-C', 'zone-D'];\nconst RADAR = { A: true, B: true, C: false, D: true };\nconst st = flow.get('sga') || {\n  capacity: Number(env.get('STOREGA_CAPACITY')) || 40,\n  threshold: Number(env.get('STOREGA_THRESHOLD')) || 14,\n  gateMode: 'auto', k: 0.62, kAuto: true,\n  entry: { in: 0, out: 0, occupancy: 0, queue: 0, checkout: 0, gate: true, temp: null, hum: null },\n  zones: { A: {}, B: {}, C: {}, D: {} }, nodes: {}, cool: {}, lastState: 0\n};\nconst [, id, kind] = String(msg.topic).split('/');\nconst p = msg.payload && typeof msg.payload === 'object' ? msg.payload : {};\nconst now = Date.now();\nconst alerts = [];\nconst cmds = [];\n\nfunction alert(key, level, title, detail, coolMs = 15 * 60 * 1000) {\n  if (st.cool[key] && now - st.cool[key] < coolMs) return;\n  st.cool[key] = now;\n  alerts.push({ payload: { key, level, title, detail, ts: now, source: 'node-red' } });\n}\n\nif (NODES.includes(id)) {\n  const n = st.nodes[id] || (st.nodes[id] = {});\n  if (kind === 'cmd') {\n    // 儀表板送給板子的指令也會經過這裡，用來同步 Node-RED 記得的設定\n    if (p.action === 'capacity' && p.value >= 10 && p.value <= 80) st.capacity = Number(p.value);\n    if (p.action === 'gate' && ['auto', 'open', 'closed'].includes(p.mode)) st.gateMode = p.mode;\n    if (p.action === 'calibrate' && p.k > 0) { st.k = Number(p.k); }\n    if (p.action === 'threshold' && p.value >= 4 && p.value <= 30) st.threshold = Number(p.value);\n  } else if (p.online === false) {\n    n.last = 0; // MQTT 遺言：板子斷線\n  } else {\n    n.last = now;\n    if (p.rssi != null) n.rssi = p.rssi;\n    if (p.ip) n.ip = p.ip;\n    if (p.fw) n.fw = p.fw;\n    if (kind === 'counter') {\n      Object.assign(st.entry, p);\n      if (['auto', 'open', 'closed'].includes(p.mode)) st.gateMode = p.mode;\n      if (p.capacity >= 10) st.capacity = p.capacity;\n    }\n    const z = id.startsWith('zone-') ? st.zones[id.slice(-1)] : null;\n    if (z && kind === 'wifi' && p.raw != null) z.raw = Number(p.raw);\n    if (z && kind === 'radar') { z.presence = !!p.presence; z.moving = !!p.moving; }\n  }\n}\n\n// 融合：雷達判斷無人 → 0；否則 Wi-Fi 原始數 × k\nlet sumRaw = 0, sumEst = 0;\nfor (const zid of Object.keys(st.zones)) {\n  const z = st.zones[zid], node = st.nodes['zone-' + zid] || {};\n  z.online = !!node.last && now - node.last < 15000;\n  z.est = RADAR[zid] && z.presence === false ? 0 : Math.round((z.raw || 0) * st.k);\n  if (z.online) { sumRaw += z.raw || 0; sumEst += z.est; }\n}\nst.sumRaw = sumRaw; st.sumEst = sumEst;\n\n// 規則\nconst occ = Number(st.entry.occupancy) || 0, ratio = occ / st.capacity;\nif (ratio >= 1) alert('cap100', 'crit', '已達人數上限，閘門關閉', `場內 ${occ} / ${st.capacity} 人，門外排隊 ${st.entry.queue || 0} 人。`, 5 * 60 * 1000);\nelse if (ratio >= 0.8) alert('cap80', 'warn', '場內人數接近上限', `目前 ${occ} / ${st.capacity} 人（${Math.round(ratio * 100)}%）。`);\nfor (const zid of Object.keys(st.zones)) {\n  const z = st.zones[zid];\n  if (z.online && z.est > st.threshold) alert('z-' + zid, 'warn', `${zid} 區擁擠`, `校正後估計 ${z.est} 人，門檻 ${st.threshold} 人。`);\n}\nif (st.entry.temp != null && st.entry.temp >= 30) alert('temp', 'warn', '入口溫度偏高', `DHT11 讀值 ${st.entry.temp}°C。`, 30 * 60 * 1000);\n\nflow.set('sga', st);\nnode.status({ fill: ratio >= 1 ? 'red' : ratio >= 0.8 ? 'yellow' : 'green', shape: 'dot', text: `場內 ${occ}/${st.capacity} · k ${st.k.toFixed(2)}` });\n\n// 狀態最多每秒送一次\nlet state = null;\nif (now - st.lastState >= 1000) {\n  st.lastState = now;\n  state = { payload: {\n    ts: now, occupancy: occ, capacity: st.capacity, queue: st.entry.queue || 0, gate: !!st.entry.gate, gateMode: st.gateMode,\n    entries: st.entry.in || 0, checkouts: st.entry.checkout || 0, conversion: st.entry.in ? +(st.entry.checkout / st.entry.in).toFixed(3) : 0,\n    temp: st.entry.temp, hum: st.entry.hum, k: +st.k.toFixed(3), threshold: st.threshold,\n    zones: Object.fromEntries(Object.entries(st.zones).map(([zid, z]) => [zid, { raw: z.raw || 0, est: z.est, presence: z.presence ?? null, online: z.online }])),\n    nodes: Object.fromEntries(NODES.map(nid => { const n = st.nodes[nid] || {}; return [nid, { online: !!n.last && now - n.last < 15000, rssi: n.rssi ?? null }]; }))\n  } };\n}\nreturn [state, alerts.length ? alerts : null, cmds.length ? cmds : null];\n",
+    "outputs": 3,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 420,
+    "y": 220,
+    "wires": [
+      [
+        "o_state"
+      ],
+      [
+        "o_alert",
+        "d_alert"
+      ],
+      [
+        "o_cmd"
+      ]
+    ]
+  },
+  {
+    "id": "o_state",
+    "type": "mqtt out",
+    "z": "sga_tab",
+    "name": "sga/system/state",
+    "topic": "sga/system/state",
+    "qos": "0",
+    "retain": "true",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "sga_client",
+    "x": 700,
+    "y": 180,
+    "wires": []
+  },
+  {
+    "id": "o_alert",
+    "type": "mqtt out",
+    "z": "sga_tab",
+    "name": "sga/system/alert",
+    "topic": "sga/system/alert",
+    "qos": "1",
+    "retain": "false",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "sga_client",
+    "x": 700,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "d_alert",
+    "type": "debug",
+    "z": "sga_tab",
+    "name": "告警",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload.title",
+    "targetType": "msg",
+    "x": 680,
+    "y": 260,
+    "wires": []
+  },
+  {
+    "id": "o_cmd",
+    "type": "mqtt out",
+    "z": "sga_tab",
+    "name": "下行指令（topic 由 msg 決定）",
+    "topic": "",
+    "qos": "1",
+    "retain": "false",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "sga_client",
+    "x": 730,
+    "y": 300,
+    "wires": []
+  },
+  {
+    "id": "i_hb",
+    "type": "inject",
+    "z": "sga_tab",
+    "name": "每 5 秒",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "5",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "3",
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 360,
+    "wires": [
+      [
+        "f_hb"
+      ]
+    ]
+  },
+  {
+    "id": "f_hb",
+    "type": "function",
+    "z": "sga_tab",
+    "name": "心跳檢查（15 秒）",
+    "func": "// 心跳檢查（每 5 秒）：超過 15 秒沒有訊息就判定離線，恢復時再通知一次\nconst NODES = ['entry-01', 'zone-A', 'zone-B', 'zone-C', 'zone-D'];\nconst st = flow.get('sga');\nif (!st) return null;\nconst now = Date.now(), out = [];\nst.offline = st.offline || {};\nfor (const id of NODES) {\n  const n = st.nodes[id] || {}, online = !!n.last && now - n.last < 15000;\n  if (!online && !st.offline[id] && n.seen !== undefined) {\n    st.offline[id] = now;\n    out.push({ payload: { key: 'off-' + id, level: 'crit', title: `${id} 離線`, detail: '超過 15 秒沒有心跳，請檢查電源與 Wi-Fi。', ts: now, source: 'node-red' } });\n  }\n  if (online && st.offline[id]) {\n    const sec = Math.round((now - st.offline[id]) / 1000);\n    delete st.offline[id];\n    out.push({ payload: { key: 'on-' + id, level: 'info', title: `${id} 恢復連線`, detail: `離線 ${sec} 秒，訊號 ${n.rssi} dBm。`, ts: now, source: 'node-red' } });\n  }\n  if (online) n.seen = true;\n}\nflow.set('sga', st);\nconst off = NODES.filter(id => st.offline[id]);\nnode.status(off.length ? { fill: 'red', shape: 'ring', text: '離線：' + off.join(', ') } : { fill: 'green', shape: 'dot', text: '5 / 5 在線' });\nreturn [out.length ? out : null];\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 400,
+    "y": 300,
+    "wires": [
+      [
+        "o_alert",
+        "d_alert"
+      ]
+    ]
+  },
+  {
+    "id": "i_k",
+    "type": "inject",
+    "z": "sga_tab",
+    "name": "每分鐘",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "60",
+    "crontab": "",
+    "once": false,
+    "onceDelay": "",
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 380,
+    "wires": [
+      [
+        "f_k"
+      ]
+    ]
+  },
+  {
+    "id": "i_know",
+    "type": "inject",
+    "z": "sga_tab",
+    "name": "立即校正",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": "",
+    "topic": "",
+    "payload": "now",
+    "payloadType": "str",
+    "x": 150,
+    "y": 420,
+    "wires": [
+      [
+        "f_k"
+      ]
+    ]
+  },
+  {
+    "id": "f_k",
+    "type": "function",
+    "z": "sga_tab",
+    "name": "自動校正 k",
+    "func": "// 自動校正 k（每分鐘）：k = 0.7 × k + 0.3 × (入口人數 ÷ Wi-Fi 裝置總數)\n// msg.payload === 'now' 時（手動按鈕）直接採用新值並通知入口節點\nconst st = flow.get('sga');\nif (!st) return null;\nconst occ = Number(st.entry.occupancy) || 0;\nif (!(st.sumRaw > 0) || occ <= 0) { node.status({ fill: 'grey', shape: 'ring', text: '等待資料' }); return null; }\nconst target = Math.min(1.2, Math.max(0.2, occ / st.sumRaw));\nconst manual = msg.payload === 'now';\nif (!manual && !st.kAuto) return null;\nconst before = st.k;\nst.k = manual ? target : 0.7 * st.k + 0.3 * target;\nflow.set('sga', st);\nnode.status({ fill: 'blue', shape: 'dot', text: `k ${before.toFixed(2)} → ${st.k.toFixed(2)}` });\nif (!manual) return null;\nreturn { topic: 'sga/entry-01/cmd', payload: { action: 'calibrate', k: +st.k.toFixed(3) } };\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 390,
+    "y": 380,
+    "wires": [
+      [
+        "o_cmd"
+      ]
+    ]
+  },
+  {
+    "id": "i_hour",
+    "type": "inject",
+    "z": "sga_tab",
+    "name": "每小時整點",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "0 10-22 * * *",
+    "once": false,
+    "onceDelay": "",
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 160,
+    "y": 500,
+    "wires": [
+      [
+        "f_hour"
+      ]
+    ]
+  },
+  {
+    "id": "f_hour",
+    "type": "function",
+    "z": "sga_tab",
+    "name": "整點紀錄 CSV",
+    "func": "// 整點紀錄：每小時把當下狀態寫成一行 CSV（接 file 節點，附加到 storega-log.csv）\nconst st = flow.get('sga');\nif (!st) return null;\nconst d = new Date(), z = st.zones;\nconst line = [d.toISOString(), st.entry.in || 0, st.entry.out || 0, st.entry.occupancy || 0, st.entry.checkout || 0,\n  st.k.toFixed(3), z.A.est ?? '', z.B.est ?? '', z.C.est ?? '', z.D.est ?? '', st.entry.temp ?? '', st.entry.hum ?? ''].join(',');\nreturn { payload: line };\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 390,
+    "y": 460,
+    "wires": [
+      [
+        "w_csv"
+      ]
+    ]
+  },
+  {
+    "id": "w_csv",
+    "type": "file",
+    "z": "sga_tab",
+    "name": "storega-log.csv",
+    "filename": "storega-log.csv",
+    "filenameType": "str",
+    "appendNewline": true,
+    "createDir": true,
+    "overwriteFile": "false",
+    "encoding": "utf8",
+    "x": 620,
+    "y": 460,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "i_cfg",
+    "type": "inject",
+    "z": "sga_tab",
+    "name": "部署時下發上限",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "5",
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 170,
+    "y": 560,
+    "wires": [
+      [
+        "f_cfg"
+      ]
+    ]
+  },
+  {
+    "id": "f_cfg",
+    "type": "function",
+    "z": "sga_tab",
+    "name": "上限 → entry-01",
+    "func": "const st=flow.get('sga');const cap=(st&&st.capacity)||Number(env.get('STOREGA_CAPACITY'))||40;\nreturn {topic:'sga/entry-01/cmd',payload:{action:'capacity',value:cap}};",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 400,
+    "y": 540,
+    "wires": [
+      [
+        "o_cmd"
+      ]
+    ]
+  }
+]
