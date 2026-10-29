@@ -27,6 +27,8 @@ const flows=[
 
   {id:'i_k',type:'inject',z:T,name:'每分鐘',props:[{p:'payload'}],repeat:'60',crontab:'',once:false,onceDelay:'',topic:'',payload:'',payloadType:'date',x:150,y:row(),wires:[['f_k']]},
   {id:'i_know',type:'inject',z:T,name:'立即校正',props:[{p:'payload'}],repeat:'',crontab:'',once:false,onceDelay:'',topic:'',payload:'now',payloadType:'str',x:150,y:y+40,wires:[['f_k']]},
+  {id:'m_btn',type:'mqtt in',z:T,name:'入口校正按鈕 sga/+/event',topic:'sga/+/event',qos:'0',datatype:'json',broker:C,nl:false,rap:true,rh:0,inputs:0,x:180,y:y+80,wires:[['f_btn']]},
+  {id:'f_btn',type:'function',z:T,name:'按鈕 → 立即校正',func:"if(msg.payload&&msg.payload.action==='calibrate')return {payload:'now'};\nreturn null;",outputs:1,timeout:0,noerr:0,initialize:'',finalize:'',libs:[],x:420,y:y+80,wires:[['f_k']]},
   {id:'f_k',type:'function',z:T,name:'自動校正 k',func:fn('calibrate.js'),outputs:1,timeout:0,noerr:0,initialize:'',finalize:'',libs:[],x:390,y,wires:[['o_cmd']]},
 
   {id:'i_hour',type:'inject',z:T,name:'每小時整點',props:[{p:'payload'}],repeat:'',crontab:'0 10-22 * * *',once:false,onceDelay:'',topic:'',payload:'',payloadType:'date',x:160,y:row()+40,wires:[['f_hour']]},

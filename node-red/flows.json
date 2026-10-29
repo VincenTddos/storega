@@ -298,6 +298,47 @@
     ]
   },
   {
+    "id": "m_btn",
+    "type": "mqtt in",
+    "z": "sga_tab",
+    "name": "入口校正按鈕 sga/+/event",
+    "topic": "sga/+/event",
+    "qos": "0",
+    "datatype": "json",
+    "broker": "sga_client",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 180,
+    "y": 460,
+    "wires": [
+      [
+        "f_btn"
+      ]
+    ]
+  },
+  {
+    "id": "f_btn",
+    "type": "function",
+    "z": "sga_tab",
+    "name": "按鈕 → 立即校正",
+    "func": "if(msg.payload&&msg.payload.action==='calibrate')return {payload:'now'};\nreturn null;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 420,
+    "y": 460,
+    "wires": [
+      [
+        "f_k"
+      ]
+    ]
+  },
+  {
     "id": "f_k",
     "type": "function",
     "z": "sga_tab",
