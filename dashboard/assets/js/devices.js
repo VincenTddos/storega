@@ -2,11 +2,11 @@
 const DV={f:'all',q:'',sel:'entry-01',confirm:0};
 const sigBars=(rssi,on)=>{const b=on?(rssi>-55?4:rssi>-65?3:rssi>-75?2:1):0;return`<span class="bars">${[5,8,11,14].map((h,i)=>`<i style="height:${h}px" class="${i<b?'on':''}"></i>`).join('')}</span>`};
 function rebootNode(id){const n=S.nodes[id],now=performance.now();n.confirmUntil=0;n.rebootUntil=now+4000;n.fault=false;n.online=false;
-  if(id==='zone-B'&&S.scenario==='fault')setScenario('normal');mqttCmd(id,{action:'reboot'});addAlert('rb-'+id,'info',`已送出重開指令給 ${id}`,'約 4 秒後重新連線。',{cool:0,target:{view:'devices',node:id}})}
+  if(id==='zone-B'&&S.scenario==='fault')setScenario('normal');mqttCmd(id,{action:'reboot'});addAlert('rb-'+id,'info',`已送出重開指令給 ${id}`,S.real?'等待板子重新上線並送出心跳。':'約 4 秒後重新連線。',{cool:0,target:{view:'devices',node:id},cat:'op'})}
 function blinkNode(id){const n=S.nodes[id];n.blinkUntil=performance.now()+4000;mqttCmd(id,{action:'blink',seconds:4})}
-function dStats(){const list=NODE_DEFS.map(d=>S.nodes[d.id]),on=list.filter(n=>n.online),avg=Math.round(on.reduce((a,n)=>a+n.rssi,0)/Math.max(1,on.length));
-  const msgs=(Math.floor((S.t-OPEN)/5)*5+S.today.entries*2).toLocaleString();
-  const it=[['cpu','在線節點',`${on.length}<small>/ 5</small>`,on.length===5?'全部正常':`${5-on.length} 個離線`],['wifi','平均訊號',`${avg}<small>dBm</small>`,avg>-65?'良好':'偏弱，考慮調整位置'],['plug','MQTT Broker',S.source==='mqtt'?'已連線':'模擬',S.source==='mqtt'?'Aedes · Node-RED':'Aedes（模擬器）'],['wave','今日訊息',msgs,'每 5 秒一次心跳']];
+function dStats(){const list=NODE_DEFS.map(d=>S.nodes[d.id]),on=list.filter(n=>n.online),sig=on.filter(n=>n.rssi!=null),avg=sig.length?Math.round(sig.reduce((a,n)=>a+n.rssi,0)/sig.length):null;
+  const msgs=(S.msgCount||0).toLocaleString(),host=(()=>{try{return new URL((S.url||'').replace(/^ws/,'http')).host}catch{return''}})();
+  const it=[['cpu','在線節點',`${on.length}<small>/ 5</small>`,on.length===5?'全部正常':S.real&&!list.some(n=>n.seen)?'還沒有節點回報':`${5-on.length} 個離線`],['wifi','平均訊號',avg==null?'—':`${avg}<small>dBm</small>`,avg==null?'沒有在線的節點':avg>-65?'良好':'偏弱，考慮調整位置'],['plug','MQTT Broker',S.real?CONN[S.conn]:'模擬',S.real?(host||'Node-RED · Aedes'):'展示模式，沒有連線'],['wave',S.real?'今日訊息':'本次訊息',msgs,S.real?'收到與送出的 MQTT 訊息':'模擬器產生的訊息']];
   const box=$('#dStats');if(!box.children.length)box.innerHTML=it.map(i=>`<div class="stat"><span class="label">${icon(i[0],14)}${i[1]}</span><b></b><p></p></div>`).join('');
   [...box.children].forEach((c,k)=>{const b=c.querySelector('b');if(b.innerHTML!==it[k][2])b.innerHTML=it[k][2];c.querySelector('p').textContent=it[k][3]})}
 function renderDevices(){
@@ -15,12 +15,12 @@ function renderDevices(){
   for(const d of NODE_DEFS){const n=S.nodes[d.id],tr=$(`#dBody tr[data-node="${d.id}"]`),reb=n.rebootUntil>now;
     const vis=(DV.f==='all'||(DV.f==='on')===n.online)&&(!q||(d.id+n.ip+d.parts+d.role).toLowerCase().includes(q));tr.hidden=!vis;if(vis)shown++;
     tr.setAttribute('aria-selected',DV.sel===d.id);
-    const st=reb?['warn','重新開機中']:n.blinkUntil>now?['warn','閃燈中']:n.online?['ok','在線']:['crit','離線'];
+    const st=reb?['warn','重新開機中']:n.blinkUntil>now?['warn','閃燈中']:n.online?['ok','在線']:n.seen?['crit','離線']:['','尚未回報'];
     tr.querySelector('.st').innerHTML=`<span class="chip ${st[0]}"><i></i>${st[1]}</span>`;
-    tr.querySelector('.sigc').innerHTML=sigBars(n.rssi,n.online)+(n.online?`${n.rssi} dBm`:'—');
-    spark(tr.querySelector('.rh'),n.rssiHist.length>1?n.rssiHist.map(v=>v==null?null:v+100):[0,0],{min:10,max:60,color:n.online?'var(--ink-3)':'var(--crit)',fmt:v=>v,label:()=>''});
-    tr.querySelector('.ip').textContent=n.ip;tr.querySelector('.up').textContent=n.online?dur(S.t-n.boot):'—';
-    const ago=S.t-n.lastSeen;tr.querySelector('.ls').textContent=ago<3?'剛剛':`${Math.round(ago)} 秒前`}
+    tr.querySelector('.sigc').innerHTML=sigBars(n.rssi,n.online&&n.rssi!=null)+(n.online&&n.rssi!=null?`${n.rssi} dBm`:'—');
+    spark(tr.querySelector('.rh'),n.rssiHist.length>1?n.rssiHist.map(v=>v==null?null:v+100):[],{min:10,max:60,color:n.online?'var(--ink-3)':'var(--crit)',fmt:v=>v,label:()=>''});
+    tr.querySelector('.ip').textContent=n.ip||'—';tr.querySelector('.up').textContent=n.online&&n.boot!=null?dur(S.t-n.boot):'—';
+    const ago=S.t-n.lastSeen;tr.querySelector('.ls').textContent=!n.seen?'從未':ago<3?'剛剛':ago<120?`${Math.round(ago)} 秒前`:`${Math.round(ago/60)} 分鐘前`}
   $('#dEmpty').hidden=shown>0;renderDrawer();renderConsole();
 }
 function renderDrawer(){const d=NODE_DEFS.find(x=>x.id===DV.sel),n=S.nodes[d.id],now=performance.now(),reb=n.rebootUntil>now,dr=$('#drawer');
@@ -34,8 +34,8 @@ function renderDrawer(){const d=NODE_DEFS.find(x=>x.id===DV.sel),n=S.nodes[d.id]
     $('#drBlink').onclick=()=>{blinkNode(d.id);morph($('#drBlinkL'),'閃燈中');toast('info',`${d.id} 閃燈中`,'板上 LED 會閃 4 秒，方便在現場找到它。',{label:'在 3D 中查看',fn:()=>$('#drLoc').click()});setTimeout(()=>morph($('#drBlinkL'),'閃燈'),4000)};
     $('#drReb').onclick=()=>{const b=$('#drReb');if(!DV.confirm||DV.confirm<performance.now()){DV.confirm=performance.now()+3000;b.classList.add('confirm');morph($('#drRebL'),'確認重開？');setTimeout(()=>{if(DV.confirm<=performance.now()){b.classList.remove('confirm');morph($('#drRebL'),'重新開機')}},3050);return}
       DV.confirm=0;b.classList.remove('confirm');morph($('#drRebL'),'重開中…');rebootNode(d.id);toast('info',`已送出重開指令給 ${d.id}`,'約 4 秒後重新連線。');setTimeout(()=>morph($('#drRebL'),'重新開機'),4200)}}
-  const c=$('#drChip');c.className='chip '+(reb?'warn':n.online?'ok':'crit');c.innerHTML=`<i></i>${reb?'重開中':n.online?'在線':'離線'}`;
-  $('#drKv').innerHTML=[['IP 位址',n.ip],['韌體',`v${n.fw}`],['運行時間',n.online?dur(S.t-n.boot):'—'],['最後回報',hhmmss(n.lastSeen)],['訊號',n.online?`${n.rssi} dBm`:'—']].map(r=>`<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('');
+  const c=$('#drChip');c.className='chip '+(reb?'warn':n.online?'ok':n.seen?'crit':'');c.innerHTML=`<i></i>${reb?'重開中':n.online?'在線':n.seen?'離線':'尚未回報'}`;
+  $('#drKv').innerHTML=[['IP 位址',n.ip||'—'],['韌體',n.fw?`v${n.fw}`:'—'],['運行時間',n.online&&n.boot!=null?dur(S.t-n.boot):'—'],['最後回報',n.seen?hhmmss(n.lastSeen):'還沒收到'],['訊號',n.online&&n.rssi!=null?`${n.rssi} dBm`:'—']].map(r=>`<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('');
   const h=n.rssiHist.length?n.rssiHist:[n.rssi];
   chart($('#drChart'),{type:'line',h:140,x:h.map((_,i)=>i===h.length-1?'現在':`${h.length-1-i} 分前`),every:Math.max(1,Math.ceil(h.length/4)),yMax:100,yFmt:v=>`${Math.round(v-100)}`,tipX:i=>i===h.length-1?'現在':`${h.length-1-i} 分鐘前`,
     series:[{name:'訊號',color:n.online?PAL.ink:PAL.crit,area:true,values:h.map(v=>v==null?null:v+100),fmt:v=>`${Math.round(v-100)} dBm`}]});
@@ -47,7 +47,7 @@ function renderDrawer(){const d=NODE_DEFS.find(x=>x.id===DV.sel),n=S.nodes[d.id]
 const CON={dir:'all',q:'',paused:false,lastWall:0,open:new Set(),rateAt:performance.now(),rateN:0,rate:0};
 function renderConsole(){
   const now=performance.now();if(now-CON.rateAt>2000){CON.rate=((S.msgCount||0)-CON.rateN)/((now-CON.rateAt)/1000);CON.rateN=S.msgCount||0;CON.rateAt=now}
-  $('#conRate').textContent=`${CON.rate.toFixed(1)} 則／秒 · ${S.source==='mqtt'?'來自 broker':'模擬器產生'}`;$('#conTotal').textContent=`今天共 ${(S.msgCount||0).toLocaleString()} 則`;
+  $('#conRate').textContent=`${CON.rate.toFixed(1)} 則／秒 · ${S.real?'來自 broker':'模擬器產生'}`;$('#conTotal').textContent=`今天共 ${(S.msgCount||0).toLocaleString()} 則`;
   if(CON.paused)return;
   const q=CON.q.toLowerCase(),L=(S.msgs||[]).filter(m=>(CON.dir==='all'||m.dir===CON.dir)&&(!q||m.topic.toLowerCase().includes(q))).slice(0,150);
   const top=L[0]?.wall||0;if(top===CON.shownTop&&L.length===CON.shownN)return;CON.shownTop=top;CON.shownN=L.length;

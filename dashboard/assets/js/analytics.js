@@ -1,19 +1,19 @@
 /* StoreGA · 分析: hourly flow, the checkout funnel, zone heat and how well Wi-Fi estimates match the door count */
 let aTab=store.get('aTab','flow'),dnMode='now';
 function aStats(){
-  const t=S.today,e=t.entries,cur=Math.floor(S.t/3600),best=S.hourly.filter(h=>h.h<=cur).sort((a,b)=>b.entries-a.entries)[0];
-  const items=[['users','今日進場',`${e}<small>人</small>`,`昨天全天 ${YK().entries} 人`],['bag','轉換率',`${e?(t.checkouts/e*100).toFixed(1):'0'}<small>%</small>`,`結帳 ${t.checkouts} 筆 · RFID`],
+  const t=S.today,e=t.entries,cur=Math.floor(S.t/3600),off=S.offHour?.entries||0,best=S.hourly.filter(h=>h.h<=cur).sort((a,b)=>b.entries-a.entries)[0];
+  const items=[['users','今日進場',`${e}<small>人</small>`,(off?`含營業時間外 ${off} 人 · `:'')+(YK()?`${yLabel()}全天 ${YK().entries} 人`:'還沒有前一天的紀錄')],['bag','轉換率',`${e?(t.checkouts/e*100).toFixed(1):'0'}<small>%</small>`,`結帳 ${t.checkouts} 筆 · RFID`],
     ['clock','最忙時段',best&&best.entries?`${pad(best.h)}:00`:'—',best&&best.entries?`${best.entries} 人進場`:'還沒有資料'],['target','估計準確度',`${(accNow()*100).toFixed(1)}<small>%</small>`,`校正前 ${pct1(accRaw())}%`]];
   const box=$('#aStats');if(!box.children.length)box.innerHTML=items.map(i=>`<div class="stat"><span class="label">${icon(i[0],14)}${i[1]}</span><b></b><p></p></div>`).join('');
   [...box.children].forEach((c,k)=>{const b=c.querySelector('b');if(b.innerHTML!==items[k][2])b.innerHTML=items[k][2];c.querySelector('p').textContent=items[k][3]});
 }
 /* hours still to come: yesterday's hourly share of the day × today's pace so far */
-const hourFc=h=>Math.round(YK().entries*(CUM[(h-9)*60]-CUM[(h-10)*60])/CUM[720]*fcRatio());
-function aFlow(){const cur=Math.floor(S.t/3600),fc=S.hourly.map(h=>h.h>cur?hourFc(h.h):null);
+const hourFc=h=>{const v=yHour(h);return v==null?null:Math.round(v*fcRatio())};
+function aFlow(){const cur=Math.floor(S.t/3600),fc=S.hourly.map(h=>h.h>cur?hourFc(h.h):null);$('#ghostLgd').hidden=!fc.some(v=>v!=null);
   chart($('#chHour'),{type:'bar',h:260,x:S.hourly.map(h=>`${h.h}時`),yMax:niceMax(Math.max(10,...S.hourly.map(h=>h.entries),...fc.filter(v=>v!=null))),
     tipX:i=>`${pad(S.hourly[i].h)}:00 – ${pad(S.hourly[i].h+1)}:00`,tipExtra:i=>{const h=S.hourly[i];return h.entries?`<div class="r m">轉換率<b>${pct1(h.checkouts/h.entries)}%</b></div>`:''},
     series:[{name:'進場',color:PAL.ink,values:S.hourly.map(h=>h.h>cur?null:h.entries),fmt:v=>v+' 人'},{name:'結帳',color:PAL.accent,values:S.hourly.map(h=>h.h>cur?null:h.checkouts),fmt:v=>v+' 筆'},{name:'預測進場',color:PAL.ink,ghost:true,values:fc,fmt:v=>'約 '+v+' 人'}]});
-  const wk=[...S.days,{label:'今天',sub:'即時',entries:S.today.entries,checkouts:S.today.checkouts}];
+  const wk=[...S.days,{label:'今天',sub:S.real?'即時':'展示',entries:S.today.entries,checkouts:S.today.checkouts}];
   chart($('#chWeek'),{type:'bar',h:260,x:wk.map(d=>d.label),sub:wk.map(d=>`${d.entries?(d.checkouts/d.entries*100).toFixed(1):'0'}%`),every:1,yMax:niceMax(Math.max(...wk.map(d=>d.entries))),
     tipX:i=>`${wk[i].label} ${wk[i].sub}`,series:[{name:'進場',color:PAL.ink,values:wk.map(d=>d.entries),fmt:v=>v+' 人'},{name:'結帳',color:PAL.accent,values:wk.map(d=>d.checkouts),fmt:v=>v+' 筆'}]})}
 function aConv(){const t=S.today,e=Math.max(1,t.entries),cur=Math.floor(S.t/3600);
@@ -21,7 +21,7 @@ function aConv(){const t=S.today,e=Math.max(1,t.entries),cur=Math.floor(S.t/3600
   $('#funnel').innerHTML=st.map((s,i)=>{const prev=i?st[i-1][1]:s[1],drop=i&&prev?Math.round((1-s[1]/prev)*100):0,w=clamp(s[1]/e,0,1);
     return `<div class="fs"><span>${s[0]}</span><span class="trk"><b style="transform:scaleX(${w.toFixed(3)});opacity:${1-i*.14}"></b>${w>.3?`<span>${pct1(s[1]/e)}%</span>`:''}</span><span class="nr">${s[1].toLocaleString()}<small class="${drop>0?'drop':''}">${i?(drop>0?`▼ ${drop}%`:'—'):'基準'}</small></span></div>`}).join('');
   const hrs=S.hourly.filter(h=>h.h<=cur),y=YK();
-  chart($('#chConv'),{type:'line',h:220,x:hrs.map(h=>`${h.h}時`),yMax:60,yFmt:v=>v+'%',every:1,tipX:i=>`${pad(hrs[i].h)}:00 時段`,refs:[{v:y.checkouts/y.entries*100,label:'昨天平均',color:PAL.ink4}],
+  chart($('#chConv'),{type:'line',h:220,x:hrs.map(h=>`${h.h}時`),yMax:60,yFmt:v=>v+'%',every:1,tipX:i=>`${pad(hrs[i].h)}:00 時段`,refs:y&&y.entries?[{v:y.checkouts/y.entries*100,label:`${yLabel()}平均`,color:PAL.ink4}]:[],
     series:[{name:'轉換率',color:PAL.accent,area:true,values:hrs.map(h=>h.entries?h.checkouts/h.entries*100:null),fmt:v=>v.toFixed(1)+'%'}]})}
 function aZone(){const cur=Math.floor(S.t/3600),mk=Math.floor(S.t/300)+'|'+S.threshold;if($('#matrix').dataset.k===mk){drawDonut();return}$('#matrix').dataset.k=mk;let mx=1;S.hourly.forEach(h=>ZONES.forEach(z=>{if(h.zn)mx=Math.max(mx,h.zsum[z.id]/h.zn)}));
   let m='<div></div>'+S.hourly.map(h=>`<div class="mh">${h.h}</div>`).join('');

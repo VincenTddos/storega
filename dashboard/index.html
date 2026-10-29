@@ -57,6 +57,7 @@
 <symbol id="store" viewBox="0 0 24 24"><path d="M3 9l1.5-5h15L21 9"/><path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/><path d="M5 12v8h14v-8"/><path d="M10 20v-5h4v5"/></symbol>
 <symbol id="shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
 <symbol id="wave" viewBox="0 0 24 24"><path d="M2 12h3l3-8 4 16 3-8h7"/></symbol>
+<symbol id="log" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></symbol>
 <symbol id="rewind" viewBox="0 0 24 24"><path d="M11 19l-9-7 9-7v14z"/><path d="M22 19l-9-7 9-7v14z"/></symbol>
 <filter id="vblur" x="0" y="-20%" width="100%" height="140%"><feGaussianBlur stdDeviation="0 2.4"/></filter>
 </svg>
@@ -64,7 +65,7 @@
 <div class="app" id="app">
   <aside class="rail" aria-label="側邊導覽">
     <div class="logo"><div class="m"><i></i></div><div><b>StoreGA</b><span>人流與限流系統</span></div></div>
-    <button class="store" id="storeBtn" aria-haspopup="true"><span class="av">信</span><div>信義旗艦店<small>台北市 · 1F · 4 區</small></div><svg class="i" style="width:16px;color:var(--ink-4)"><use href="#chev"/></svg></button>
+    <button class="store" id="storeBtn" data-tt="門市資訊"><span class="av">店</span><div>我的門市<small>1F · 4 區</small></div><svg class="i" style="width:16px;color:var(--ink-4)"><use href="#chev"/></svg></button>
     <nav class="nav" aria-label="主要頁面">
       <span class="navind" aria-hidden="true"></span>
       <a href="#overview" data-page="overview"><svg class="i"><use href="#home"/></svg><span>總覽</span></a>
@@ -73,23 +74,26 @@
       <a href="#events" data-page="events"><svg class="i"><use href="#bell"/></svg><span>事件</span><b class="ct" data-badge="alerts" hidden>0</b></a>
       <div class="navlbl label">管理</div>
       <a href="#devices" data-page="devices"><svg class="i"><use href="#cpu"/></svg><span>裝置</span><b class="ct soft" data-badge="nodes">5</b></a>
+      <a href="#log" data-page="log"><svg class="i"><use href="#log"/></svg><span>日誌</span></a>
       <a href="#settings" data-page="settings"><svg class="i"><use href="#cog"/></svg><span>設定</span></a>
     </nav>
-    <div class="foot" id="railFoot"><b><span class="chip live" style="height:20px;padding:0 7px;font-size:11px"><i></i><span id="srcTag">SIM</span></span><span id="srcName">模擬器運作中</span></b><span id="srcDesc">Aedes 模擬 · 5 個節點</span><br>最後更新 <span id="fresh">剛剛</span></div>
-    <div class="me"><span class="av">陳</span><div>陳怡安<small>店長 · 管理員</small></div><button class="collapse" id="collapse" aria-label="收合側欄" data-tt="收合側欄"><svg class="i" style="width:16px;transform:rotate(90deg)"><use href="#chev"/></svg></button></div>
+    <div class="foot" id="railFoot"><b><span class="chip live" style="height:20px;padding:0 7px;font-size:11px"><i></i><span id="srcTag">DEMO</span></span><span id="srcName">展示模式</span></b><span id="srcDesc">模擬資料，不會保存</span><br>最後更新 <span id="fresh">剛剛</span></div>
+    <div class="me"><span class="av">管</span><div>管理員<small>店長</small></div><button class="collapse" id="collapse" aria-label="收合側欄" data-tt="收合側欄"><svg class="i" style="width:16px;transform:rotate(90deg)"><use href="#chev"/></svg></button></div>
   </aside>
 
   <div class="main">
     <header class="bar">
-      <div class="crumb">信義旗艦店 <span>/</span> <b id="crumb">總覽</b></div>
-      <div class="pop"><button class="simbtn" id="simBtn" aria-haspopup="true" aria-expanded="false"><span class="sd"></span><span id="simLbl">模擬器 · 10×</span><svg class="i" style="width:14px"><use href="#chev"/></svg></button>
-        <div class="popv simpop" id="simPop" hidden role="dialog" aria-label="資料來源與模擬器">
+      <div class="crumb"><span id="crumbStore">我的門市</span> <span>/</span> <b id="crumb">總覽</b></div>
+      <div class="pop"><button class="simbtn" id="simBtn" aria-haspopup="true" aria-expanded="false"><span class="sd"></span><span id="simLbl">展示模式 · 10×</span><svg class="i" style="width:14px"><use href="#chev"/></svg></button>
+        <div class="popv simpop" id="simPop" hidden role="dialog" aria-label="資料來源">
           <header><b>資料來源</b><a class="link" href="#settings/source">設定</a></header>
           <div class="sp-body">
-            <div class="sp-row"><span>來源</span><b id="spSrc">模擬器（不需要硬體）</b></div>
-            <div class="sp-row"><span>模擬速度</span><div class="seg" role="group" aria-label="模擬速度" id="speedSeg"><span class="thumb"></span><button data-speed="1" aria-pressed="false">1×</button><button data-speed="10" aria-pressed="true">10×</button><button data-speed="60" aria-pressed="false">60×</button></div></div>
+            <div class="sp-row"><span>模式</span><b id="spSrc">展示模式（模擬資料）</b></div>
+            <div id="spReal" hidden><p class="sp-note">只顯示 ESP32 真的送來的資料。今天的數字與日誌存在這台電腦的瀏覽器。</p><div class="row"><a class="btn sec sm" href="#settings/source">連線設定</a><a class="btn ghost sm" href="#log">查看日誌</a></div></div>
+            <div id="spSim"><div class="sp-row"><span>模擬速度</span><div class="seg" role="group" aria-label="模擬速度" id="speedSeg"><span class="thumb"></span><button data-speed="1" aria-pressed="false">1×</button><button data-speed="10" aria-pressed="true">10×</button><button data-speed="60" aria-pressed="false">60×</button></div></div>
             <div class="sp-lbl label">情境</div>
             <div class="scn" id="scnList"></div>
+            <button class="btn pri sm" id="spToReal" style="margin-top:12px;width:100%">切換到真實模式</button></div>
           </div>
           <footer><button class="btn ghost sm" id="pauseBtn"><span class="isw" data-s="a"><svg class="i a" style="width:15px"><use href="#pause"/></svg><svg class="i b" style="width:15px"><use href="#play"/></svg></span><span class="mph" id="pauseLbl">暫停</span><span class="kbd">Space</span></button><button class="btn sec sm" id="toLive">回到即時</button></footer>
         </div>
@@ -121,10 +125,10 @@
               <div class="menu right" id="expMenu" hidden role="menu"><button class="mi" role="menuitem" data-f="CSV">CSV 逐時報表<span class="kbd k">.csv</span></button><button class="mi" role="menuitem" data-f="JSON">JSON 原始資料<span class="kbd k">.json</span></button></div></div>
           </div>
         </div>
-        <section class="welcome" id="welcome" hidden aria-label="第一次使用">
-          <span class="wi"><svg class="i" style="width:18px"><use href="#store"/></svg></span>
-          <p><b>現在看到的是模擬資料</b>不需要硬體就能操作每一頁；接上 ESP32 時到「設定 → 資料來源」填 Node-RED 位址。</p>
-          <div class="row"><a class="btn pri sm" href="#settings/source">連接 Node-RED</a><button class="btn ghost sm" id="welcomeKeys"><svg class="i" style="width:15px"><use href="#keyboard"/></svg>快捷鍵</button><button class="btn ghost sm icon" id="welcomeX" aria-label="不再顯示"><svg class="i" style="width:15px"><use href="#x"/></svg></button></div>
+        <section class="welcome" id="welcome" hidden aria-label="展示模式">
+          <span class="wi"><svg class="i" style="width:18px"><use href="#play"/></svg></span>
+          <p><b>展示模式</b>畫面上是模擬器產生的資料，不會保存。接上 ESP32 後切到真實模式，就只會顯示真的收到的數字。</p>
+          <div class="row"><button class="btn pri sm" id="welcomeReal">切換到真實模式</button><button class="btn ghost sm" id="welcomeKeys"><svg class="i" style="width:15px"><use href="#keyboard"/></svg>快捷鍵</button><button class="btn ghost sm icon" id="welcomeX" aria-label="先不要提示"><svg class="i" style="width:15px"><use href="#x"/></svg></button></div>
         </section>
         <div class="grid">
           <section class="card hero" aria-label="場內人數">
@@ -147,7 +151,7 @@
                 <div><span class="label">入口溫濕度</span><b id="fEnv">--</b></div>
                 <div><span class="label">Wi-Fi 校正</span><b id="fK">k 0.62</b></div>
               </div>
-              <div><span class="label">近 90 分鐘 · 未來 30 分鐘</span><span class="flowkey"><span><i></i>今天</span><span><i class="f"></i>預測</span><span><i class="y"></i>昨天</span></span><div class="flow-wrap"><svg class="flow" id="flow" viewBox="0 0 300 84" preserveAspectRatio="none" aria-hidden="true"></svg></div></div>
+              <div><span class="label" id="flowLbl">近 90 分鐘 · 未來 30 分鐘</span><span class="flowkey"><span><i></i>今天</span><span><i class="f"></i>預測</span><span><i class="y"></i><b>昨天</b></span></span><div class="flow-wrap"><svg class="flow" id="flow" viewBox="0 0 300 84" preserveAspectRatio="none" aria-hidden="true"></svg></div></div>
             </div>
           </section>
           <section class="card map" aria-label="四區即時分布">
@@ -202,7 +206,7 @@
             </div>
             <div class="card zones"><div class="card-h"><h3>四個分區</h3><span class="label" id="thrLbl">門檻 14 人</span></div><div class="zl" id="zoneList"></div></div>
             <div class="card zdetail" id="zdetail" hidden></div>
-            <div class="card receipt"><div class="card-h"><h3>感測紀錄</h3><span class="label" id="rcCount">#0000</span></div><div class="paper"><div class="rc-head">STOREGA · 信義旗艦店<br><span id="rcDate"></span></div><ol class="rc" id="rc"></ol></div></div>
+            <div class="card receipt"><div class="card-h"><h3>感測紀錄</h3><span class="label" id="rcCount">#0000</span></div><div class="paper"><div class="rc-head">STOREGA · <span id="rcStore">我的門市</span><br><span id="rcDate"></span></div><ol class="rc" id="rc"></ol></div></div>
           </aside>
         </div>
       </section>
@@ -211,11 +215,11 @@
       <section class="page" id="p-analytics" data-title="分析" aria-label="分析">
         <div class="ph"><div><span class="label">ANALYTICS · 開店至今</span><h1>分析</h1><p>人流、轉換、分區與 Wi-Fi 估計準確度。滑過圖表看每個時段的數字。</p></div>
           <div class="row"><button class="btn ghost" id="printBtn"><svg class="i" style="width:16px"><use href="#chart"/></svg>列印報表</button><button class="btn sec" data-export="CSV"><svg class="i" style="width:16px"><use href="#download"/></svg>匯出 CSV</button></div></div>
-        <div class="printhead"><b>StoreGA 每日報表 · 信義旗艦店</b><span id="printDate"></span></div>
+        <div class="printhead"><b>StoreGA 每日報表 · <span id="printStore">我的門市</span></b><span id="printDate"></span></div>
         <div class="stats4" id="aStats"></div>
         <div class="tabs" role="tablist" id="aTabs"><button role="tab" aria-selected="true" data-t="flow">人流</button><button role="tab" aria-selected="false" data-t="conv">轉換</button><button role="tab" aria-selected="false" data-t="zone">分區</button><button role="tab" aria-selected="false" data-t="acc">Wi-Fi 準確度</button><span class="ul"></span></div>
         <div class="apanel" data-t="flow">
-          <div class="card"><div class="card-h"><h3>每小時進場與結帳</h3><span class="lgd"><span><i style="background:var(--ink)"></i>進場</span><span><i style="background:var(--accent)"></i>結帳</span><span><i class="ghost"></i>預測進場</span></span></div><div class="chart" id="chHour" aria-label="每小時進場與結帳人數"></div></div>
+          <div class="card"><div class="card-h"><h3>每小時進場與結帳</h3><span class="lgd"><span><i style="background:var(--ink)"></i>進場</span><span><i style="background:var(--accent)"></i>結帳</span><span id="ghostLgd"><i class="ghost"></i>預測進場</span></span></div><div class="chart" id="chHour" aria-label="每小時進場與結帳人數"></div></div>
           <div class="card"><div class="card-h"><h3>近 7 天</h3><span class="lgd"><span><i style="background:var(--ink)"></i>進場</span><span><i style="background:var(--accent)"></i>結帳</span><span>下方為轉換率</span></span></div><div class="chart" id="chWeek" aria-label="近七天進場與結帳"></div></div>
         </div>
         <div class="apanel" data-t="conv" hidden>
@@ -271,11 +275,26 @@
         </section>
       </section>
 
+      <!-- ============ 日誌 ============ -->
+      <section class="page" id="p-log" data-title="日誌" aria-label="日誌">
+        <div class="ph"><div><span class="label">LOG · 系統日誌</span><h1>日誌</h1><p id="lgSub">連線、節點、人流、告警、指令與每一個操作，依時間記錄。</p></div>
+          <div class="row"><div class="pop"><div class="split"><button class="btn sec" id="lgExp"><svg class="i" style="width:16px"><use href="#download"/></svg><span class="mph" id="lgExpL">匯出 .log</span></button><button class="btn sec" id="lgExpMore" aria-label="選擇匯出格式" aria-haspopup="true" aria-expanded="false"><svg class="i" style="width:16px"><use href="#chev"/></svg></button></div>
+            <div class="menu right" id="lgExpMenu" hidden role="menu"><button class="mi" role="menuitem" data-f="log">純文字日誌<span class="kbd k">.log</span></button><button class="mi" role="menuitem" data-f="csv">試算表<span class="kbd k">.csv</span></button></div></div></div></div>
+        <div class="stats4 lgcats" id="lgCats"></div>
+        <div class="filterbar">
+          <div class="inp lgday"><select id="lgDay" aria-label="日期"></select><span class="chev"><svg class="i" style="width:15px"><use href="#chev"/></svg></span></div>
+          <div class="seg" role="group" aria-label="等級" id="lgSeg"><span class="thumb"></span><button aria-pressed="true" data-lv="all">全部</button><button aria-pressed="false" data-lv="info">資訊</button><button aria-pressed="false" data-lv="warn">警告</button><button aria-pressed="false" data-lv="error">錯誤</button></div>
+          <div class="inp search"><span class="pre"><svg class="i" style="width:16px"><use href="#search"/></svg></span><input id="lgQ" placeholder="搜尋訊息、節點、主題…" aria-label="搜尋日誌"></div>
+        </div>
+        <section class="card lgcard" aria-label="日誌內容"><div class="lghead"><span>時間</span><span>等級</span><span>分類</span><span>內容</span></div><div class="lglist" id="lgList" role="log"></div><div class="confoot"><span id="lgCount"></span><button class="btn ghost sm" id="lgMore" hidden>再顯示 300 筆</button></div></section>
+      </section>
+
       <!-- ============ 設定 ============ -->
       <section class="page" id="p-settings" data-title="設定" aria-label="設定">
-        <div class="ph"><div><span class="label">SETTINGS</span><h1>設定</h1><p>改動會即時送到入口節點（Node-RED 模式下透過 MQTT）。</p></div></div>
+        <div class="ph"><div><span class="label">SETTINGS</span><h1>設定</h1><p>規則改動會即時送到入口節點（真實模式下透過 MQTT 的 sga/entry-01/cmd）。</p></div></div>
         <div class="setlayout">
           <nav class="subnav" aria-label="設定分類" id="subnav">
+            <a href="#settings/store" data-s="store"><svg class="i"><use href="#store"/></svg>門市資訊</a>
             <a href="#settings/rules" data-s="rules"><svg class="i"><use href="#shield"/></svg>限流規則</a>
             <a href="#settings/calib" data-s="calib"><svg class="i"><use href="#wifi"/></svg>Wi-Fi 校正</a>
             <a href="#settings/source" data-s="source"><svg class="i"><use href="#plug"/></svg>資料來源</a>
@@ -285,6 +304,16 @@
             <a href="#settings/data" data-s="data"><svg class="i"><use href="#download"/></svg>資料</a>
           </nav>
           <div class="setpanels">
+            <form class="card spanel" data-s="store" id="storeForm" novalidate hidden>
+              <div class="sh2"><h2>門市資訊</h2><p>顯示在側欄、感測紀錄、列印報表與匯出檔案裡。只存在這台電腦的瀏覽器。</p></div>
+              <div class="fgrid">
+                <div class="f"><label for="pfStore">門市名稱</label><div class="inp"><input id="pfStore" maxlength="24" autocomplete="off"></div></div>
+                <div class="f"><label for="pfPlace">地點或說明 <small>選填</small></label><div class="inp"><input id="pfPlace" maxlength="32" placeholder="例如 台中市 · 1F · 4 區" autocomplete="off"></div></div>
+                <div class="f"><label for="pfName">你的名字</label><div class="inp"><input id="pfName" maxlength="16" autocomplete="off"></div></div>
+                <div class="f"><label for="pfRole">職稱 <small>選填</small></label><div class="inp"><input id="pfRole" maxlength="16" placeholder="例如 店長、組員" autocomplete="off"></div></div>
+              </div>
+              <div class="ffoot"><span class="saved clean" id="pfSaved"><i></i><span>所有變更都已儲存</span></span><div class="row"><button type="button" class="btn ghost" id="pfReset">復原</button><button class="btn pri" id="pfSave">儲存</button></div></div>
+            </form>
             <form class="card spanel" data-s="rules" id="rulesForm" novalidate>
               <div class="sh2"><h2>限流規則</h2><p>場內人數到上限時閘門自動關閉，新顧客在門外排隊；分區超過門檻會提醒你派人。</p></div>
               <div class="fgrid">
@@ -302,10 +331,10 @@
               <div class="row" style="margin-top:18px"><button class="btn acc" id="calBtn"><span class="mph" id="calLbl">立即校正</span></button><label class="switch"><input type="checkbox" id="fKauto"><span class="tr"></span>每分鐘自動微調</label></div>
             </div>
             <div class="card spanel" data-s="source" hidden>
-              <div class="sh2"><h2>資料來源</h2><p>沒有硬體時用模擬器展示；接上 Node-RED（Aedes broker 開啟 WebSocket）就會切到真實資料。</p></div>
-              <div class="seg" role="group" aria-label="資料來源" id="srcSeg"><span class="thumb"></span><button data-src="sim" aria-pressed="true">模擬器</button><button data-src="mqtt" aria-pressed="false">Node-RED（MQTT）</button></div>
-              <div class="f" style="margin-top:20px"><label for="mqUrl">Broker WebSocket 位址</label><div class="inp" id="mqBox"><span class="pre"><svg class="i" style="width:16px"><use href="#plug"/></svg></span><input id="mqUrl" value="ws://192.168.50.10:8080" spellcheck="false" aria-describedby="mqHelp"></div><span class="help" id="mqHelp">需要以 ws:// 或 wss:// 開頭。</span></div>
-              <div class="row" style="margin-top:14px"><button class="btn pri" id="mqGo"><span class="mph" id="mqLbl">連線</span></button><span class="think" id="mqState"></span></div>
+              <div class="sh2"><h2>資料來源</h2><p><b>真實模式</b>只顯示 ESP32 經 Node-RED 送來的資料，今天的數字、過去每天的摘要與日誌會存在這台電腦的瀏覽器；<b>展示模式</b>用模擬器產生資料，不會保存。</p></div>
+              <div class="seg" role="group" aria-label="模式" id="srcSeg"><span class="thumb"></span><button data-src="mqtt" aria-pressed="false">真實模式</button><button data-src="sim" aria-pressed="true">展示模式</button></div>
+              <div class="f" style="margin-top:20px"><label for="mqUrl">Broker WebSocket 位址</label><div class="inp" id="mqBox"><span class="pre"><svg class="i" style="width:16px"><use href="#plug"/></svg></span><input id="mqUrl" value="ws://192.168.50.10:8080" spellcheck="false" aria-describedby="mqHelp"></div><span class="help" id="mqHelp">Node-RED 電腦的 IP，Aedes 的 WebSocket 埠（預設 8080）。</span></div>
+              <div class="row" style="margin-top:14px"><button class="btn pri" id="mqGo"><span class="mph" id="mqLbl">連線並使用真實模式</span></button><button class="btn ghost" id="mqStop" hidden>中斷連線</button><span class="think" id="mqState"></span></div>
               <div class="topics"><span class="label">訂閱的主題</span>
                 <div class="topic"><code>sga/+/counter</code><span>入口：進出人數、結帳、閘門、溫濕度</span><button class="btn ghost sm" data-copy="sga/+/counter"><span class="mph">複製</span></button></div>
                 <div class="topic"><code>sga/+/wifi</code><span>分區：Wi-Fi 原始裝置數</span><button class="btn ghost sm" data-copy="sga/+/wifi"><span class="mph">複製</span></button></div>
@@ -345,9 +374,10 @@
               <div class="swlist" style="margin-top:20px"><label class="switch"><input type="checkbox" id="fMini"><span class="tr"></span><span><b>側欄只顯示圖示</b><small>畫面較小時有更多空間給圖表</small></span></label></div>
             </div>
             <div class="card spanel" data-s="data" hidden>
-              <div class="sh2"><h2>資料</h2><p>今日資料存在瀏覽器記憶體中；正式部署時由 Node-RED 寫入資料庫。</p></div>
+              <div class="sh2"><h2>資料</h2><p id="dataNote">展示模式的資料只在記憶體裡。</p></div>
+              <dl class="kvs" id="dataKv"></dl>
               <div class="row"><button class="btn sec" data-export="CSV"><svg class="i" style="width:16px"><use href="#download"/></svg>匯出 CSV</button><button class="btn sec" data-export="JSON"><svg class="i" style="width:16px"><use href="#download"/></svg>匯出 JSON</button></div>
-              <div class="danger"><div><b>清除今日資料</b><p>重新從 10:00 開店開始模擬，設定會保留。</p></div><button class="btn dan" id="resetBtn">清除今日資料…</button></div>
+              <div class="danger"><div><b>清除今日資料</b><p id="resetNote">重新模擬到現在這個時間，設定會保留。</p></div><button class="btn dan" id="resetBtn">清除今日資料…</button></div>
             </div>
           </div>
         </div>
@@ -356,13 +386,22 @@
   </div>
 </div>
 
-<div class="scrim" id="delScrim" hidden><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="delT"><span class="di"><svg class="i"><use href="#warn"/></svg></span><h3 id="delT">清除今日資料？</h3><p>今天的進場紀錄、結帳與事件都會刪除。請輸入門市名稱「<b style="color:var(--ink)">信義旗艦店</b>」確認。</p>
-  <div class="f"><div class="inp"><input id="delIn" placeholder="信義旗艦店" autocomplete="off" aria-label="輸入門市名稱"></div></div>
+<div class="scrim" id="delScrim" hidden><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="delT"><span class="di"><svg class="i"><use href="#warn"/></svg></span><h3 id="delT">清除今日資料？</h3><p>今天的進場紀錄、結帳與事件都會刪除。請輸入門市名稱「<b style="color:var(--ink)" id="delName">我的門市</b>」確認。</p>
+  <div class="f"><div class="inp"><input id="delIn" placeholder="我的門市" autocomplete="off" aria-label="輸入門市名稱"></div></div>
   <div class="acts2"><button class="btn ghost" id="delCancel">取消</button><button class="btn dan" id="delGo" disabled>清除今日資料</button></div></div></div>
 <div class="scrim" id="keysScrim" hidden><div class="dialog keys" role="dialog" aria-modal="true" aria-labelledby="keysT"><div class="row" style="justify-content:space-between"><h3 id="keysT">鍵盤快捷鍵</h3><button class="btn ghost sm icon" id="keysX" aria-label="關閉"><svg class="i" style="width:15px"><use href="#x"/></svg></button></div>
-  <dl class="kl"><dt><span class="kbd" data-mod>⌘</span><span class="kbd">K</span></dt><dd>指令面板：搜尋頁面、分區、裝置、動作</dd><dt><span class="kbd">/</span></dt><dd>也可以打開指令面板</dd><dt><span class="kbd">1</span>–<span class="kbd">6</span></dt><dd>切換到第 1–6 頁</dd>
+  <dl class="kl"><dt><span class="kbd" data-mod>⌘</span><span class="kbd">K</span></dt><dd>指令面板：搜尋頁面、分區、裝置、動作</dd><dt><span class="kbd">/</span></dt><dd>也可以打開指令面板</dd><dt><span class="kbd">1</span>–<span class="kbd">7</span></dt><dd>切換到第 1–7 頁</dd>
     <dt><span class="kbd">T</span></dt><dd>日間／夜間模式</dd><dt><span class="kbd">Space</span></dt><dd>暫停／繼續即時更新</dd><dt><span class="kbd">Esc</span></dt><dd>關閉選單、對話框，或結束回放</dd>
     <dt><span class="kbd">H</span> <span class="kbd">L</span> <span class="kbd">R</span></dt><dd>即時店況：熱度圖、區域標籤、重設視角</dd><dt><span class="kbd">←</span><span class="kbd">→</span></dt><dd>時間軸、圖表：逐格移動（Shift 一次 10 格）</dd><dt><span class="kbd">?</span></dt><dd>打開這個說明</dd></dl></div></div>
+<div class="scrim" id="modeScrim" hidden><div class="dialog modes" role="dialog" aria-modal="true" aria-labelledby="modeT">
+  <h3 id="modeT">要用哪一種資料？</h3><p>之後隨時可以在右上角或「設定 → 資料來源」切換。</p>
+  <div class="mgrid">
+    <section class="mc"><span class="mi2 real"><svg class="i"><use href="#plug"/></svg></span><b>真實模式</b><p>連到 Node-RED，只顯示 ESP32 真的送來的資料。今天的數字、每天的摘要與日誌會存在這台電腦。</p>
+      <div class="f"><label for="mcUrl">Broker WebSocket 位址</label><div class="inp" id="mcBox"><input id="mcUrl" spellcheck="false" autocomplete="off"></div><span class="help" id="mcHelp">Node-RED 電腦的 IP，Aedes 的 WebSocket 埠（預設 8080）</span></div>
+      <button class="btn pri" id="mcGo">連線並使用真實模式</button></section>
+    <section class="mc"><span class="mi2"><svg class="i"><use href="#play"/></svg></span><b>展示模式</b><p>沒有硬體也能操作每一頁。資料由模擬器依時段產生，畫面會標示「展示模式」，也不會保存。</p>
+      <button class="btn sec" id="mcDemo">先看展示模式</button></section>
+  </div></div></div>
 <div class="sr-only" id="announce" aria-live="assertive"></div>
 
 <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.163.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.163.0/examples/jsm/"}}</script>
@@ -374,6 +413,7 @@
 <script src="assets/js/analytics.js"></script>
 <script src="assets/js/events.js"></script>
 <script src="assets/js/devices.js"></script>
+<script src="assets/js/logs.js"></script>
 <script src="assets/js/settings.js"></script>
 <script src="assets/js/twin.js"></script>
 <script src="assets/js/app.js"></script>

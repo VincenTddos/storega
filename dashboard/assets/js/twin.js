@@ -315,7 +315,7 @@ function gatherIntents(){
   const m=new Map();
   const sn=snap();
   if(sn&&sn.zones){let n=0;for(const zd of ZONES){const c=sn.zones[zd.id][0]||0;for(let k=0;k<c;k++){m.set('r'+zd.id+k,zd.id==='D'?{kind:'checkout'}:{kind:'zone',zone:zd.id});n++}}for(let k=0;k<Math.max(0,sn.occ-n);k++)m.set('rc'+k,{kind:'corr'});return m}
-  if(S.source==='sim'){
+  if(!S.real){
     for(const a of S.agents){let it;
       if(a.phase==='leave')it={kind:'exit',paid:!!a.paid};
       else{const z=a.phase==='dwell'?a.zone:a.plan[a.i];it=z==='D'?{kind:'checkout'}:{kind:'zone',zone:z}}
@@ -485,7 +485,7 @@ function frame(now){
   if(fly){fly.t=Math.min(1,fly.t+dt/fly.dur);const e=fly.t<.5?4*fly.t**3:1-Math.pow(-2*fly.t+2,3)/2;camera.position.lerpVectors(fly.fp,fly.tp,e);controls.target.lerpVectors(fly.ft,fly.tt,e);if(fly.t>=1)fly=null}
   if(buildP>=.97){
     dirAcc+=dt;if(dirAcc>.25){dirAcc=0;direct()}
-    const mul=S.source==='sim'?(S.speed>=60?2.2:S.speed>=10?1.35:1):1,wdt=S.paused?0:rdt;
+    const mul=!S.real?(S.speed>=60?2.2:S.speed>=10?1.35:1):1,wdt=S.paused?0:rdt;
     const list=[...walkers.values()];
     for(const w of list){stepWalker(w,wdt,mul);if(w.dying&&w.scale<=0){release(w);walkers.delete(w.id)}}
     staff.forEach(s=>{staffAI(s,wdt);stepWalker(s,wdt,1)});

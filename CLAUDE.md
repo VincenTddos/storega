@@ -4,8 +4,9 @@
 
 ## 跑起來
 
-- 儀表板不需要建置：直接開 `dashboard/index.html`。預設是模擬器。
-- 本機真的 MQTT：`cd tools && npm install && npm run demo` → http://localhost:8080 → 設定 → 資料來源 → `ws://localhost:8080`。
+- 儀表板不需要建置：直接開 `dashboard/index.html`。第一次會問模式：**真實模式**（`S.real`，只顯示 MQTT 收到的資料，存在 localStorage）或**展示模式**（模擬器，不保存）。
+- 本機真的 MQTT：`cd tools && npm install && npm run demo` → http://localhost:8080 → 真實模式 → `ws://localhost:8080`。
+- 真實模式不准出現假資料：沒收到的值顯示「—／尚未回報」，`YK()`、`yesterdayNow()`、`yOcc()`、`yHour()` 沒有紀錄時回傳 `null`，頁面要處理。
 - 外部資源：Google Fonts、`unpkg.com/three@0.163.0`、`unpkg.com/mqtt@5.10.1`（需要網路）。
 - 全部測試：`sh scripts/test-all.sh`（需要 Node 18+ 與 g++；tools 的測試要先 `npm install`）。
 
@@ -21,13 +22,13 @@
 | 檔案 | 負責 |
 | --- | --- |
 | `util.js` | `$`、`$$`、時間格式、`store`（localStorage）、亂數、`download` |
-| `model.js` | 模擬器、感測融合、k 校正、心跳、告警 `addAlert`、MQTT 橋接 `onMqtt`／`mqttCmd`、訊息紀錄 `logMsg`、切到真實資料 `resetForLive`、回放 `snap()`、匯出 |
+| `model.js` | 模擬器、感測融合、k 校正、心跳、告警 `addAlert`、MQTT 橋接 `onMqtt`／`mqttCmd`、訊息紀錄 `logMsg`、模式 `startReal()`／`startDemo()`、每日保存與封存 `saveReal`／`restoreReal`／`archiveDay`、前一天的比較值、日誌 `slog()`、回放 `snap()`、匯出 |
 | `ui.js` | 主題、提示框、toast、`popNum`／`morph`／`odo`（數字動態）、`beam`、`mxHTML`、`spark`、`chart`、分段控制、popover、指令面板、`chime`（告警聲） |
-| `overview.js` 等 | 各頁的 `init*()` 與 `render*()`；`devices.js` 含 MQTT 主控台；`settings.js` 含韌體 config.h 產生器 |
+| `overview.js` 等 | 各頁的 `init*()` 與 `render*()`；`devices.js` 含 MQTT 主控台；`logs.js` 是日誌頁；`settings.js` 含門市資訊與韌體 config.h 產生器 |
 | `twin.js` | three.js 3D 店面，第一次進「即時店況」才載入；顧客走 A* 網格 |
-| `app.js` | 路由（`#page` 或 `#settings/sub`）、上方列、橫幅、快捷鍵、啟動與計時器 |
+| `app.js` | 路由（`#page` 或 `#settings/sub`）、上方列、橫幅、模式選擇、門市資訊、快捷鍵、啟動與計時器 |
 
-狀態都在全域 `S`（見 `freshState()`）。畫面每 0.8 秒重繪目前那一頁（分析、設定每 2.4 秒）。`dashboard/test/` 用 `vm` 載入 `util.js`＋`model.js` 測試，不需要瀏覽器。
+狀態都在全域 `S`（見 `freshState(real)`）。新的操作或系統事件請呼叫 `slog(分類, 等級, 訊息, 細節)` 寫進日誌。畫面每 0.8 秒重繪目前那一頁（分析、設定每 2.4 秒）。`dashboard/test/` 用 `vm` 載入 `util.js`＋`model.js` 測試，不需要瀏覽器。
 
 ## 韌體（`firmware/`）
 

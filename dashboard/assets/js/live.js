@@ -46,7 +46,7 @@ function setReplay(idx){
 }
 function tlGeo(){const el=$('#tl'),W=Math.max(320,el.clientWidth),H=140,L=8,Rr=8,T=24,B=24;const X=t=>L+(t-OPEN)/(CLOSE-OPEN)*(W-L-Rr);return{el,W,H,T,B,X,tAt:x=>OPEN+clamp((x-L)/(W-L-Rr),0,1)*(CLOSE-OPEN)}}
 function renderTimeline(){
-  const g=tlGeo(),{W,H,T,B,X}=g,s=S.series;
+  const g=tlGeo(),{W,H,T,B,X:X0}=g,X=t=>X0(clamp(t,OPEN,CLOSE)),s=S.series.filter(p=>p.t>=OPEN&&p.t<=CLOSE);  // 真實模式 also records outside opening hours; the timeline only spans them
   const yM=niceMax(Math.max(S.capacity*1.15,...s.map(p=>p.occ),5)),Y=v=>T+(1-clamp(v,0,yM)/yM)*(H-T-B);
   let o=`<svg viewBox="0 0 ${W} ${H}" height="${H}" aria-hidden="true"><defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="${PAL.line}" stroke-width="2"/></pattern>
     <linearGradient id="tlg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${PAL.accent}" stop-opacity=".28"/><stop offset="1" stop-color="${PAL.accent}" stop-opacity="0"/></linearGradient></defs>`;
@@ -56,7 +56,7 @@ function renderTimeline(){
     o+=`<path d="${d} L${X(s.at(-1).t).toFixed(1)} ${Y(0)} L${X(s[0].t).toFixed(1)} ${Y(0)} Z" fill="url(#tlg)"/><path d="${d}" fill="none" stroke="${PAL.accent}" stroke-width="1.8" stroke-linejoin="round"/>`;
     o+=`<path d="M${s.map(p=>`${X(p.t).toFixed(1)} ${Y(p.queue).toFixed(1)}`).join(' L')}" fill="none" stroke="${PAL.warn}" stroke-width="1.4"/>`;
     o+=`<path d="M${s.map(p=>`${X(p.t).toFixed(1)} ${Y(p.cap).toFixed(1)}`).join(' L')}" fill="none" stroke="${PAL.crit}" stroke-width="1.2" stroke-dasharray="4 4" opacity=".8"/>`}
-  const seen=new Set();for(const a of S.alerts.filter(a=>a.level!=='info')){const x=Math.round(X(a.t));if(seen.has(x>>2))continue;seen.add(x>>2);o+=`<rect x="${x-3.5}" y="6" width="7" height="7" transform="rotate(45 ${x} 9.5)" fill="${a.level==='crit'?PAL.crit:PAL.warn}"><title>${hhmm(a.t)} ${esc(a.title)}</title></rect>`}
+  const seen=new Set();for(const a of S.alerts.filter(a=>a.level!=='info'&&a.t>=OPEN&&a.t<=CLOSE)){const x=Math.round(X(a.t));if(seen.has(x>>2))continue;seen.add(x>>2);o+=`<rect x="${x-3.5}" y="6" width="7" height="7" transform="rotate(45 ${x} 9.5)" fill="${a.level==='crit'?PAL.crit:PAL.warn}"><title>${hhmm(a.t)} ${esc(a.title)}</title></rect>`}
   const nx=X(S.t);o+=`<line x1="${nx}" x2="${nx}" y1="${T-6}" y2="${H-B}" stroke="${PAL.ink}" stroke-width="1.5"/><circle cx="${nx}" cy="${T-6}" r="3" fill="${PAL.ink}"/>`;
   const sn=snap();if(sn){const x=X(sn.t);o+=`<line x1="${x}" x2="${x}" y1="${T-8}" y2="${H-B}" stroke="${PAL.zB}" stroke-width="2"/><circle cx="${x}" cy="${Y(sn.occ)}" r="5" fill="${PAL.zB}" stroke="${PAL.raised}" stroke-width="2"/>`}
   if(tlHover!=null&&!sn){o+=`<line x1="${X(tlHover)}" x2="${X(tlHover)}" y1="${T}" y2="${H-B}" stroke="${PAL.ink3}" stroke-dasharray="2 3"/>`}
@@ -84,7 +84,7 @@ function renderEntry(){
   const on=Math.max(1,Math.round(clamp(r,0,1)*14)),col=r<.6?'#34C759':r<.85?'#FF9500':'#FF3B30';
   $$('#leds i').forEach((e,i)=>{const lit=i<on;e.style.background=lit?col:'';e.style.boxShadow=lit?`0 0 8px ${col}`:'none'});
   const gc=$('#gateChip');gc.className='chip '+(gate?'ok':'crit');gc.innerHTML=`<i></i>${gate?'閘門開啟':'閘門關閉'}`;
-  $('#eQueue').textContent=vQueue()+' 人';$('#eEnv').textContent=`${S.temp.toFixed(1)}° · ${Math.round(S.hum)}%`;
+  $('#eQueue').textContent=vQueue()+' 人';$('#eEnv').textContent=S.temp==null?'--':`${S.temp.toFixed(1)}° · ${S.hum==null?'--':Math.round(S.hum)}%`;
   setSeg($('#gateSeg'),b=>b.dataset.gate===S.gateMode);
 }
 const hold={hs:0,hr:0,D:1500};
@@ -114,7 +114,7 @@ function renderZones(){
   spark($('#zdSpark'),z.hist.length>1?z.hist:[0,0],{color:`var(--z${zd.id})`,fmt:x=>x,label:()=>''});
   const rows=[['Wi-Fi 原始',`${v.raw} 支`],['校正係數 k',S.k.toFixed(2)],['校正後估計',`${v.est} 人`],['毫米波雷達',!zd.radar?'未安裝':z.presence?(z.moving?'有人 · 移動':'有人 · 靜止'):'無人'],
     ['平均停留',z.dwellN?(z.dwellSum/z.dwellN/60).toFixed(1)+' 分':'—'],['節點',`${zd.node} · ${n.online?n.rssi+' dBm':'離線'}`]];
-  if(S.source==='sim'&&!snap())rows.splice(3,0,['模擬實際人數',`${z.truth} 人`]);
+  if(!S.real&&!snap())rows.splice(3,0,['模擬實際人數',`${z.truth} 人`]);
   $('#zdKv').innerHTML=rows.map(r=>`<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('');
 }
 function selectZone(id,fly){selZone=(selZone===id&&!fly)?null:id;if(selZone&&fly)window.twin?.focusZone(selZone);renderZones()}

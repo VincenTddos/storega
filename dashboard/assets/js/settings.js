@@ -1,5 +1,5 @@
-/* StoreGA · 設定: rules, Wi-Fi calibration, data source, notifications, look, data */
-let setSub='rules';
+/* StoreGA · 設定: store info, rules, Wi-Fi calibration, data source (真實／展示模式), notifications, firmware, look, data */
+let setSub='store';
 const RF={};
 function rulesRead(){return{capacity:+$('#fCap').textContent,threshold:+$('#fThr').value,gateMode:$('#fGate [aria-pressed="true"]').dataset.g,whitelist:$('#fWhite').checked}}
 function rulesFill(){$('#fCap').textContent=S.capacity;$('#fCap80').textContent=Math.round(S.capacity*.8);const t=$('#fThr');t.value=S.threshold;thrUI();
@@ -8,7 +8,7 @@ function thrUI(){const t=$('#fThr');t.style.setProperty('--p',((t.value-t.min)/(
 function gateHelp(){const g=$('#fGate [aria-pressed="true"]').dataset.g;$('#fGateH').textContent={auto:'達上限時 SG90 轉到 0°，燈條轉紅，新顧客在門外排隊。',open:'不限制入場人數，只記錄與提醒。',closed:'立刻關閉閘門，直到改回其他模式。'}[g]}
 function rulesDirty(){const v=rulesRead(),n=[v.capacity!==S.capacity,v.threshold!==S.threshold,v.gateMode!==S.gateMode,v.whitelist!==S.whitelist].filter(Boolean).length;
   const s=$('#rulesSaved');s.classList.toggle('clean',!n);s.lastChild.textContent=n?`有 ${n} 項未儲存的變更`:'所有變更都已儲存';$('#rulesSave').disabled=!n;$('#rulesReset').disabled=!n;return n}
-function setGate(m,quiet){S.gateMode=m;admit();persist();mqttCmd('entry-01',{action:'gate',mode:m});
+function setGate(m,quiet){S.gateMode=m;if(!S.real)admit();persist();slog('op',m==='closed'?'warn':'info',`閘門模式改為「${{auto:'自動限流',open:'常開',closed:'暫停入場'}[m]}」`,'');mqttCmd('entry-01',{action:'gate',mode:m});
   if(!quiet)toast(m==='closed'?'warn':'ok',{auto:'已切回自動限流',open:'閘門改為常開',closed:'已暫停入場'}[m],{auto:'達上限時自動關閉。',open:'不限制入場人數。',closed:'新顧客會在門外排隊，數字面板顯示「請稍候」。'}[m],m==='closed'?{label:'恢復',fn:()=>setGate('auto')}:null);
   renderLive();if(setSub==='rules'&&!rulesDirty())rulesFill()}
 async function runCalib(){if(RF.cal)return;RF.cal=true;const card=$('#calib'),lis=$$('#steps li'),btn=$('#calBtn');beam(card,'run',true);morph($('#calLbl'),'校正中…');btn.style.pointerEvents='none';
@@ -24,15 +24,27 @@ async function runCalib(){if(RF.cal)return;RF.cal=true;const card=$('#calib'),li
 function mqStatus(state,msg){const el=$('#mqState');RF.mq=state;
   el.innerHTML=state==='busy'?`${mxHTML('orbit')}<span class="shim">${esc(msg)}</span>`:state==='ok'?`<span style="color:var(--ok);display:inline-flex;gap:6px;align-items:center">${OKSVG}${esc(msg)}</span>`:(msg?`<span style="color:var(--crit)">${esc(msg)}</span>`:'');if(state==='err'&&!msg){$('#mqHelp').className='help err';$('#mqHelp').textContent='需要以 ws:// 或 wss:// 開頭，例如 ws://192.168.50.10:8080'}
   const box=$('#mqBox');box.classList.toggle('err',state==='err');if(state==='err'){box.classList.remove('shake');void box.offsetWidth;box.classList.add('shake')}
-  beam($('#mqBox'),'line',state==='busy');morph($('#mqLbl'),state==='ok'?'重新連線':state==='busy'?'連線中…':'連線');
-  if(state==='ok')toast('ok','已連上 Node-RED',msg);}
+  beam($('#mqBox'),'line',state==='busy');morph($('#mqLbl'),state==='ok'?'重新連線':state==='busy'?'連線中…':'連線並使用真實模式');
+  if(state==='ok')toast('ok','已連上 Node-RED',msg);renderSettings()}
 onMqtt.status=mqStatus;
 function renderSettings(){
   if(!RF.cal){const kv=$('#kv');popNum(kv,S.k.toFixed(2));if(!$('#kn').textContent.startsWith('剛剛'))$('#kn').textContent=S.kAuto?'目前的 k · 每分鐘自動微調':'目前的 k · 手動模式'}
-  $('#fKauto').checked=S.kAuto;setSeg($('#srcSeg'),b=>b.dataset.src===S.source);
+  $('#fKauto').checked=S.kAuto;setSeg($('#srcSeg'),b=>(b.dataset.src==='mqtt')===S.real);
+  $('#mqStop').hidden=!S.real||S.conn==='idle';
+  const h=loadHistory(),ld=logDays();
+  $('#dataNote').textContent=S.real?'真實模式：今天的數字每 15 秒存進這台電腦的瀏覽器，重新整理或關掉再開都會接續；每天結束後留下一份摘要給「昨天」比較與近 7 天圖表。':'展示模式：資料由模擬器產生，只在記憶體裡，不會保存。真實模式的資料不受影響。';
+  const kv=S.real?[['今天',`進場 ${S.today.entries} · 結帳 ${S.today.checkouts}${S.savedAt?` · 最後保存 ${hhmmss(S.t-(performance.now()-S.savedAt)/1000)}`:''}`],['過去的天數',h.length?`${h.length} 天（${h[0].date} 起）`:'還沒有，今天結束後會有第一天'],['日誌',`${ld.length||0} 天 · 今天 ${S.logs.length} 筆`]]
+    :[['真實模式保存的天數',h.length?`${h.length} 天`:'還沒有'],['真實模式的日誌',`${ld.length} 天`]];
+  const kh=kv.map(r=>`<dt>${r[0]}</dt><dd>${esc(r[1])}</dd>`).join('');if($('#dataKv').innerHTML!==kh)$('#dataKv').innerHTML=kh;
+  $('#resetNote').textContent=S.real?'今天的數字從 0 重新累積；過去的天數與日誌會保留。':'重新模擬到現在這個時間，設定會保留。';
 }
+/* ---------- 門市資訊 ---------- */
+const PF=[['store','#pfStore'],['place','#pfPlace'],['name','#pfName'],['role','#pfRole']];
+function pfFill(){const p=profile();PF.forEach(([k,sel])=>$(sel).value=p[k]||'');pfDirty()}
+function pfDirty(){const p=profile(),n=PF.filter(([k,sel])=>$(sel).value.trim()!==(p[k]||'')).length,s=$('#pfSaved');
+  s.classList.toggle('clean',!n);s.lastChild.textContent=n?`有 ${n} 項未儲存的變更`:'所有變更都已儲存';$('#pfSave').disabled=!n||!$('#pfStore').value.trim()||!$('#pfName').value.trim();$('#pfReset').disabled=!n;return n}
 function setSettingsSub(s){setSub=s||'rules';$$('#subnav a').forEach(a=>a.toggleAttribute('aria-current',a.dataset.s===setSub));if($('#subnav [aria-current]'))$('#subnav [aria-current]').setAttribute('aria-current','page');
-  $$('.spanel').forEach(p=>p.hidden=p.dataset.s!==setSub);requestAnimationFrame(placeAll);if(setSub==='rules')rulesFill();renderSettings()}
+  $$('.spanel').forEach(p=>p.hidden=p.dataset.s!==setSub);requestAnimationFrame(placeAll);if(setSub==='rules')rulesFill();if(setSub==='store')pfFill();renderSettings()}
 function initSettings(){
   $$('[data-step]').forEach(b=>b.onclick=()=>{const o=$('#fCap'),v=clamp(+o.textContent+ +b.dataset.step,10,80);popNum(o,v);o.textContent=v;$('#fCap80').textContent=Math.round(v*.8);rulesDirty()});
   $('#fThr').oninput=()=>{thrUI();rulesDirty()};$('#fGate').addEventListener('pick',()=>{gateHelp();rulesDirty()});$('#fWhite').onchange=rulesDirty;
@@ -40,23 +52,30 @@ function initSettings(){
   $('#rulesForm').onsubmit=async e=>{e.preventDefault();const b=$('#rulesSave'),v=rulesRead(),t=b.innerHTML;b.style.width=b.offsetWidth+'px';b.classList.add('loading');await wait(700);
     const ch=[];if(v.capacity!==S.capacity)ch.push(`上限 ${S.capacity} → ${v.capacity} 人`);if(v.threshold!==S.threshold)ch.push(`門檻 ${S.threshold} → ${v.threshold} 人`);
     const gm=v.gateMode!==S.gateMode;Object.assign(S,{capacity:v.capacity,threshold:v.threshold,whitelist:v.whitelist});admit();persist();
-    const thrCh=ch.some(x=>x.startsWith('門檻'));mqttCmd('entry-01',{action:'capacity',value:S.capacity});if(thrCh)mqttCmd('entry-01',{action:'threshold',value:S.threshold});if(gm)setGate(v.gateMode,true);
+    slog('op','info','儲存限流規則',(ch.join('，')||'內容沒有改變')+(v.whitelist!==S.whitelist?'':''));const thrCh=ch.some(x=>x.startsWith('門檻'));mqttCmd('entry-01',{action:'capacity',value:S.capacity});if(thrCh)mqttCmd('entry-01',{action:'threshold',value:S.threshold});if(gm)setGate(v.gateMode,true);
     b.classList.remove('loading');b.classList.add('done');b.innerHTML=icon('check',16)+'已儲存';rulesDirty();toast('ok','規則已儲存',(ch.join('，')||'設定已更新')+'，已同步到 entry-01');
     setTimeout(()=>{b.classList.remove('done');b.innerHTML=t;b.style.width='';rulesDirty()},1400)};
   $('#calBtn').onclick=runCalib;$('#fKauto').onchange=e=>{S.kAuto=e.target.checked;persist();renderSettings()};
-  $('#srcSeg').addEventListener('pick',e=>{const s=e.detail.dataset.src;if(s==='sim'){setSource('sim');mqStatus('ok','已切回模擬器');toast('info','已切回模擬器','不需要硬體，資料依時段自動產生。')}else{$('#mqUrl').focus();setSeg($('#srcSeg'),b=>b.dataset.src===S.source);$('#mqHelp').textContent='輸入位址後按「連線」，連上才會切換。'}});
-  $('#mqUrl').value=store.get('mqttUrl','ws://192.168.50.10:8080');
+  $('#srcSeg').addEventListener('pick',e=>{const s=e.detail.dataset.src;
+    if(s==='sim'){if(S.real){useDemo();$('#mqState').innerHTML='';toast('info','已切換到展示模式','真實模式的資料已保存，切回來會接續。')}}
+    else if(!S.real){$('#mqUrl').focus();setSeg($('#srcSeg'),b=>(b.dataset.src==='mqtt')===S.real);$('#mqHelp').className='help';$('#mqHelp').textContent='輸入 Node-RED 的位址後按「連線並使用真實模式」。'}});
+  $('#mqUrl').value=suggestUrl();
+  $('#mqStop').onclick=()=>{mqttDisconnect();slog('conn','info','手動中斷連線','');$('#mqState').innerHTML='';renderShell();renderSettings();toast('info','已中斷與 Node-RED 的連線','仍在真實模式，畫面不會出現模擬資料。',{label:'重新連線',fn:()=>useReal($('#mqUrl').value.trim())})};
   $('#mqUrl').oninput=e=>{const ok=/^wss?:\/\/[^\s/:]+(:\d{2,5})?\/?$/.test(e.target.value.trim()),h=$('#mqHelp');$('#mqBox').classList.toggle('err',!ok);h.className='help'+(ok?'':' err');h.textContent=ok?'格式正確。':'需要以 ws:// 或 wss:// 開頭，例如 ws://192.168.50.10:8080'};
   $('#mqUrl').onkeydown=e=>{if(e.key==='Enter')$('#mqGo').click()};
-  $('#mqGo').onclick=()=>mqttConnect($('#mqUrl').value.trim());
+  $('#mqGo').onclick=()=>{const v=$('#mqUrl').value.trim();if(!/^wss?:\/\/[^\s/:]+(:\d{2,5})?\/?$/.test(v)){mqStatus('err','');return}useReal(v)};
   $$('[data-nt]').forEach(i=>{i.checked=!!S.notify[i.dataset.nt];i.onchange=()=>{S.notify[i.dataset.nt]=i.checked;persist()}});
   $('#themeSeg').addEventListener('pick',e=>setTheme(e.detail.dataset.t));
   $('#fMini').checked=store.get('mini',false);$('#fMini').onchange=e=>setMini(e.target.checked);
   $('#resetBtn').onclick=()=>{$('#delScrim').hidden=false;$('#delIn').value='';$('#delGo').disabled=true;setTimeout(()=>$('#delIn').focus(),50)};
-  $('#delIn').oninput=e=>{$('#delGo').disabled=e.target.value.trim()!=='信義旗艦店'};
+  $('#delIn').oninput=e=>{$('#delGo').disabled=e.target.value.trim()!==profile().store};
   $('#delIn').onkeydown=e=>{if(e.key!=='Enter')return;if($('#delGo').disabled){const f=$('#delIn').parentElement;f.classList.add('err');f.classList.remove('shake');void f.offsetWidth;f.classList.add('shake');setTimeout(()=>f.classList.remove('err'),1200)}else $('#delGo').click()};
   $('#delCancel').onclick=()=>$('#delScrim').hidden=true;$('#delScrim').addEventListener('click',e=>{if(e.target.id==='delScrim')$('#delScrim').hidden=true});
   $('#delGo').onclick=()=>{$('#delScrim').hidden=true;resetToday()};
+  PF.forEach(([,sel])=>$(sel).oninput=pfDirty);$('#pfReset').onclick=pfFill;
+  $('#storeForm').onsubmit=e=>{e.preventDefault();if($('#pfSave').disabled)return;const p={};PF.forEach(([k,sel])=>p[k]=$(sel).value.trim());const before=profile();store.set('profile',p);applyProfile();pfDirty();
+    slog('op','info','更新門市資訊',PF.filter(([k])=>before[k]!==p[k]).map(([k])=>`${k}: ${before[k]||'—'} → ${p[k]||'—'}`).join('，'));
+    toast('ok','已儲存門市資訊',`${p.store} · ${p.name}`,{label:'復原',fn:()=>{store.set('profile',before);applyProfile();pfFill()}})};
   initFirmware();
 }
 

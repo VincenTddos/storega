@@ -1,5 +1,7 @@
-/* StoreGA · data model: store simulator, sensor fusion, alerts and the MQTT bridge to Node-RED.
-   The simulator mirrors what the real ESP32 nodes publish, so every page works with or without hardware. */
+/* StoreGA · data model: store simulator, sensor fusion, alerts, the MQTT bridge to Node-RED and the log.
+   Two modes: 展示模式 (S.real=false) runs the simulator, which mirrors what the real ESP32 nodes publish;
+   真實模式 (S.real=true) shows only what arrives over MQTT — nothing is invented, and today's numbers,
+   past days and the log are kept in this browser's localStorage. */
 /* ================= model ================= */
 const ZONES=[
   {id:'A',name:'新品展示區',node:'zone-A',radar:true, x0:-12.5,x1:-1,z0:-8.5,z1:-.5,dwell:[180,600],color:'#3366E6'},
@@ -27,22 +29,28 @@ const SCN={
 };
 
 let S;
-function freshState(){
+function freshState(real=false){
   R=mulberry32(20261028);
   const nodes={};
-  NODE_DEFS.forEach((d,i)=>nodes[d.id]={...d,rssi:-48-i*6,rssi0:-48-i*6,rssiHist:[],lastSeen:OPEN,online:true,fault:false,rebootUntil:0,blinkUntil:0,boot:OPEN-3600*3-i*977,confirmUntil:0});
+  NODE_DEFS.forEach((d,i)=>nodes[d.id]=real
+    ?{...d,ip:null,fw:null,rssi:null,rssiHist:[],lastSeen:-1e9,seen:false,online:false,fault:false,rebootUntil:0,blinkUntil:0,boot:null,confirmUntil:0}
+    :{...d,rssi:-48-i*6,rssi0:-48-i*6,rssiHist:[],lastSeen:OPEN,seen:true,online:true,fault:false,rebootUntil:0,blinkUntil:0,boot:OPEN-3600*3-i*977,confirmUntil:0});
   const zones={};ZONES.forEach(z=>zones[z.id]={truth:0,raw:0,est:0,presence:false,moving:false,dwellSum:0,dwellN:0,stale:false,hist:[]});
   const hourly=Array.from({length:12},(_,i)=>({h:10+i,entries:0,checkouts:0,errRaw:0,errEst:0,base:0,zsum:{A:0,B:0,C:0,D:0},zn:0}));
-  const wr=mulberry32(7741),days=[],d0=new Date();d0.setHours(12,0,0,0);const wk='日一二三四五六';
-  for(let i=6;i>=1;i--){const d=new Date(d0-i*864e5),we=d.getDay()===0||d.getDay()===6,e=Math.round((we?820:640)+wr()*120);days.push({label:`${d.getMonth()+1}/${d.getDate()}`,sub:`週${wk[d.getDay()]}`,entries:e,checkouts:Math.round(e*(.33+wr()*.07))})}
-  return {t:OPEN,speed:10,paused:false,source:'sim',scenario:'normal',capacity:40,threshold:14,gateMode:'auto',gateOpen:true,
-    k:.62,kAuto:true,whitelist:true,queue:0,agents:[],nextId:1,nodes,zones,hourly,days,series:[],alerts:[],alertLast:{},alertId:1,alertVer:0,
+  return {real,date:dayKey(),t:OPEN,speed:10,paused:false,source:real?'mqtt':'sim',scenario:'normal',capacity:40,threshold:14,gateMode:'auto',gateOpen:true,
+    k:.62,kAuto:true,whitelist:true,queue:0,agents:[],nextId:1,nodes,zones,hourly,days:real?loadHistory().slice(-6):demoDays(),series:[],alerts:[],alertLast:{},alertId:1,alertVer:0,
     today:{entries:0,exits:0,checkouts:0,engaged:0,long:0,reachedD:0,dwellSum:0,dwellN:0,balked:0,errRaw:0,errEst:0,base:0},
-    temp:24.2,hum:60,acc5:0,acc60:0,preroll:true,fx:[],lastData:performance.now(),sumRaw:0,sumEst:0,
-    upt:[],uptCur:0,notify:{crit:true,warn:true,info:false}};
+    temp:real?null:24.2,hum:real?null:60,acc5:0,acc60:0,preroll:!real,fx:[],lastData:real?-1e9:performance.now(),sumRaw:0,sumEst:0,
+    upt:[],uptCur:0,notify:{crit:true,warn:true,info:false},logs:[],logVer:0,conn:real?'idle':null};
 }
-const occ=()=>S.source==='sim'?S.agents.length:(S.mqttOcc||0);
-const hourAt=t=>S.hourly[clamp(Math.floor(t/3600)-10,0,11)];
+/* 展示模式 only: six invented past days so the week chart has something to compare with */
+function demoDays(){const wr=mulberry32(7741),days=[],d0=new Date();d0.setHours(12,0,0,0);const wk='日一二三四五六';
+  for(let i=6;i>=1;i--){const d=new Date(d0-i*864e5),we=d.getDay()===0||d.getDay()===6,e=Math.round((we?820:640)+wr()*120);
+    days.push({date:dayKey(d),label:`${d.getMonth()+1}/${d.getDate()}`,sub:`週${wk[d.getDay()]}`,entries:e,checkouts:Math.round(e*(.33+wr()*.07)),dwell:+(14+wr()*3).toFixed(1)})}
+  return days}
+const occ=()=>S.real?(S.mqttOcc||0):S.agents.length;
+/* the hour bucket for time t; in 真實模式 anything outside 10:00–22:00 goes to a separate bucket instead of being filed under the first or last hour */
+const hourAt=t=>{const i=Math.floor(t/3600)-10;if(S.real&&(i<0||i>11))return S.offHour||(S.offHour={h:-1,entries:0,checkouts:0,errRaw:0,errEst:0,base:0,zsum:{A:0,B:0,C:0,D:0},zn:0});return S.hourly[clamp(i,0,11)]};
 
 /* ================= simulator ================= */
 function enter(){
@@ -55,7 +63,7 @@ function admit(){
   const can=()=>S.gateMode==='open'||(S.gateMode==='auto'&&occ()<S.capacity);
   while(S.queue>0&&can()){S.queue--;enter()}
   if(S.queue>14){S.today.balked+=S.queue-14;S.queue=14}
-  S.gateOpen=can();
+  const was=S.gateOpen;S.gateOpen=can();if(was!==S.gateOpen)logGate();
 }
 function simStep(dt){
   S.t+=dt;
@@ -108,7 +116,8 @@ function fuse(){
   if(o>0){const hr=hourAt(S.t),er=Math.abs(sR-o),ee=Math.abs(sE-o);hr.errRaw+=er;hr.errEst+=ee;hr.base+=o;S.today.errRaw+=er;S.today.errEst+=ee;S.today.base+=o}
 }
 function minute(){
-  S.series.push({t:S.t,occ:occ(),queue:S.queue,cap:S.capacity,gate:S.gateOpen,entries:S.today.entries,checkouts:S.today.checkouts,zones:Object.fromEntries(ZONES.map(z=>{const v=S.zones[z.id];return[z.id,[S.source==='sim'?v.truth:v.est,v.raw,v.est,v.stale?1:0]]}))});if(S.series.length>760)S.series.shift();
+  const h=Math.floor(S.t/3600);if(S.t%3600<60&&h>10&&h<=22){const hr=S.hourly[h-11];slog('flow','info',`${pad(h-1)}:00–${pad(h)}:00 小時摘要`,`進場 ${hr.entries} · 結帳 ${hr.checkouts}${hr.entries?` · 轉換率 ${pct1(hr.checkouts/hr.entries)}%`:''}`)}
+  S.series.push({t:S.t,occ:occ(),queue:S.queue,cap:S.capacity,gate:S.gateOpen,entries:S.today.entries,checkouts:S.today.checkouts,zones:Object.fromEntries(ZONES.map(z=>{const v=S.zones[z.id];return[z.id,[S.source==='sim'?v.truth:v.est,v.raw,v.est,v.stale?1:0]]}))});if(S.series.length>(S.real?1440:760))S.series.shift();
   ZONES.forEach(z=>{const h=S.zones[z.id].hist;h.push(S.zones[z.id].est);if(h.length>60)h.shift()});
   NODE_DEFS.forEach(d=>{const n=S.nodes[d.id],h=n.rssiHist;h.push(n.online?n.rssi:null);if(h.length>30)h.shift()});
   if(S.kAuto&&S.sumRaw>0&&occ()>0)S.k=clamp(S.k*.7+(occ()/S.sumRaw)*.3,.2,1.2);
@@ -117,7 +126,7 @@ function minute(){
 function calibrate(){
   if(!(S.sumRaw>0))return null;
   const before=S.k;S.k=clamp(occ()/S.sumRaw,.2,1.2);fuse();
-  addAlert('cal','info','已重新校正 Wi-Fi 係數',`k ${before.toFixed(2)} → ${S.k.toFixed(2)}，以入口 ${occ()} 人為基準`,{cool:0});
+  addAlert('cal','info','已重新校正 Wi-Fi 係數',`k ${before.toFixed(2)} → ${S.k.toFixed(2)}，以入口 ${occ()} 人為基準`,{cool:0,cat:'op'});
   mqttCmd('entry-01',{action:'calibrate',k:+S.k.toFixed(3)});
   return {before,k:S.k,occ:occ(),raw:S.sumRaw};
 }
@@ -125,11 +134,12 @@ function checkNodes(){
   const now=performance.now();
   for(const d of NODE_DEFS){
     const n=S.nodes[d.id],was=n.online;
-    if(n.rebootUntil>0&&n.rebootUntil<=now&&!n.fault){n.rebootUntil=0;n.lastSeen=S.t;n.boot=S.t}
+    if(n.rebootUntil>0&&n.rebootUntil<=now){n.rebootUntil=0;if(!S.real&&!n.fault){n.lastSeen=S.t;n.boot=S.t}}  // 真實模式 waits for the board's own heartbeat
     n.online=n.rebootUntil<=now&&(S.t-n.lastSeen)<15;
-    if(was&&!n.online&&n.rebootUntil<=now)addAlert('off-'+d.id,'crit',`${d.id} 離線`,`超過 15 秒沒有心跳，${d.role}資料暫停更新。`,{cool:0,target:{view:'devices',node:d.id}});
-    if(!was&&n.online)addAlert('on-'+d.id,'info',`${d.id} 恢復連線`,`訊號 ${n.rssi} dBm`,{cool:0,target:{view:'devices',node:d.id}});
-    if(!n.online)S.uptCur=2;else if(n.rssi<-80||n.rebootUntil>now)S.uptCur=Math.max(S.uptCur,1);
+    if(was&&!n.online&&n.rebootUntil<=now)addAlert('off-'+d.id,'crit',`${d.id} 離線`,`${n.will?'broker 代為送出遺言（板子斷線）':'超過 15 秒沒有心跳'}，${d.role}資料暫停更新。`,{cool:0,target:{view:'devices',node:d.id}});
+    if(was&&!n.online)n.dropped=true;
+    if(!was&&n.online&&n.dropped&&(n.dropped=false,true))addAlert('on-'+d.id,'info',`${d.id} 恢復連線`,`訊號 ${n.rssi} dBm`,{cool:0,target:{view:'devices',node:d.id}});
+    if(!n.online){if(n.seen)S.uptCur=2}else if(n.rssi<-80||n.rebootUntil>now)S.uptCur=Math.max(S.uptCur,1);
   }
 }
 function checkAlerts(){
@@ -137,12 +147,14 @@ function checkAlerts(){
   if(r>=1)addAlert('cap100','crit','已達人數上限，閘門關閉',`場內 ${o} / ${S.capacity} 人，門外排隊 ${S.queue} 人。`,{target:{view:'overview'}});
   else if(r>=.8)addAlert('cap80','warn','場內人數接近上限',`目前 ${o} / ${S.capacity} 人（${Math.round(r*100)}%）。`,{target:{view:'overview'}});
   for(const zd of ZONES){const z=S.zones[zd.id];if(!z.stale&&z.est>S.threshold)addAlert('z-'+zd.id,'warn',`${zd.name}擁擠`,`校正後估計 ${z.est} 人，門檻 ${S.threshold} 人。`,{target:{view:'live',zone:zd.id}})}
+  if(S.queue>0&&!S.qLog){S.qLog=true;slogOnce('q1',120,'flow','warn','門外開始排隊',`場內 ${o} / ${S.capacity} 人`)}else if(!S.queue&&S.qLog){S.qLog=false;slogOnce('q0',120,'flow','info','門外排隊已消化','')}
   if(S.temp>=30)addAlert('temp','warn','入口溫度偏高',`DHT11 讀值 ${S.temp.toFixed(1)}°C。`);
 }
-function addAlert(key,level,title,detail,{cool=900,target=null}={}){
+function addAlert(key,level,title,detail,{cool=900,target=null,cat=null}={}){
   const last=S.alertLast[key];if(cool&&last!=null&&S.t-last<cool)return;
   S.alertLast[key]=S.t;S.alerts.unshift({id:S.alertId++,t:S.t,level,title,detail,target,ack:S.preroll});
   if(S.alerts.length>250)S.alerts.pop();S.alertVer++;rlog(level,title,'');
+  slog(cat||(target?.node?'node':'alert'),level==='crit'?'error':level==='warn'?'warn':'info',title,detail);
   if(!S.preroll){if(S.notify[level])toast(level,title,detail,target?{label:'查看',fn:()=>goTarget(target)}:null);if(level!=='info')announce(`${level==='crit'?'嚴重告警':'警告'}：${title}`);onAlert(S.alerts[0])}
 }
 /* ================= MQTT bridge (Aedes in Node-RED, WebSocket) =================
@@ -156,30 +168,39 @@ let client=null,onLiveReset;
 function loadMqtt(){return new Promise((res,rej)=>{if(window.mqtt)return res();const s=document.createElement('script');s.src='https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js';s.onload=res;s.onerror=()=>rej();document.head.appendChild(s)})}
 async function mqttConnect(url){
   if(!/^wss?:\/\/[^\s/:]+(:\d{2,5})?\/?$/.test(url)){onMqtt.status('err','');return}
-  onMqtt.status('busy','正在連線到 '+url);
-  try{await loadMqtt()}catch{onMqtt.status('err','mqtt.js 載入失敗，請確認電腦有網路。');return}
+  S.conn='connecting';S.url=url;onMqtt.status('busy','正在連線到 '+url);slog('conn','info',`連線到 ${url}`,'');
+  try{await loadMqtt()}catch{S.conn='err';slog('conn','error','mqtt.js 載入失敗','需要網路才能從 unpkg.com 載入 MQTT 函式庫');onMqtt.status('err','mqtt.js 載入失敗，請確認電腦有網路。');return}
   if(client){client.end(true);client=null}
-  client=window.mqtt.connect(url,{reconnectPeriod:3000,connectTimeout:6000,clientId:'storega-ui-'+Math.random().toString(16).slice(2,8)});
-  client.on('connect',()=>{client.subscribe('sga/+/+');if(S.source!=='mqtt')resetForLive();setSource('mqtt');store.set('mqttUrl',url);onMqtt.status('ok','已連線 · 訂閱 sga/+/+')});
-  client.on('error',e=>onMqtt.status('err',`連線失敗：${e.message}。請確認 Aedes 的 WebSocket 埠已開啟、電腦與 ESP32 在同一個網路。`));
-  client.on('close',()=>{if(S.source==='mqtt')onMqtt.status('busy','連線中斷，3 秒後自動重試…')});
-  client.on('message',(topic,buf)=>{let m;try{m=JSON.parse(buf.toString())}catch{return}if(!S.paused)onMqtt(topic,m)});
+  const c=client=window.mqtt.connect(url,{reconnectPeriod:3000,connectTimeout:6000,clientId:'storega-ui-'+Math.random().toString(16).slice(2,8)});
+  c.on('connect',()=>{if(c!==client)return;client.subscribe('sga/+/+');if(!S.real)startReal(),onLiveReset();S.conn='ok';S.everConnected=true;setSource('mqtt');store.set('mqttUrl',url);
+    slog('conn','info','已連上 Node-RED',`${url} · 訂閱 sga/+/+`);onMqtt.status('ok','已連線 · 訂閱 sga/+/+')});
+  c.on('error',e=>{if(c!==client)return;S.conn='err';slogOnce('conn-err',60,'conn','error','連線失敗',e.message);onMqtt.status('err',`連線失敗：${e.message}。請確認 Aedes 的 WebSocket 埠已開啟、電腦與 ESP32 在同一個網路。`)});
+  c.on('close',()=>{if(c!==client||!S.real)return;if(S.conn==='ok')slog('conn','warn','與 Node-RED 的連線中斷','每 3 秒自動重試');if(S.conn!=='err')S.conn='down';onMqtt.status('busy','連線中斷，3 秒後自動重試…')});
+  c.on('message',(topic,buf)=>{if(c!==client)return;let m;try{m=JSON.parse(buf.toString())}catch{return}if(!S.paused)onMqtt(topic,m)});
 }
+function mqttDisconnect(){if(client){client.end(true);client=null}if(S)S.conn='idle'}
 function onMqtt(topic,m){
   const [,id,kind]=topic.split('/'),n=S.nodes[id];if(!n)return;
   S.lastData=performance.now();logMsg(topic,m,'in');
-  if(m.online===false){n.lastSeen=S.t-99;return}  /* MQTT last will: the board dropped off the network */
-  n.lastSeen=S.t;
+  if(m.online===false){n.will=true;n.lastSeen=S.t-99;return}  /* MQTT last will: the board dropped off the network */
+  if(!n.seen){n.seen=true;slog('node','info',`${id} 開始回報`,`${topic}${m.ip?` · ${m.ip}`:''}`)}
+  n.lastSeen=S.t;n.will=false;
+  if(m.ip&&n.ip&&m.ip!==n.ip)slog('node','warn',`${id} 的 IP 改變`,`${n.ip} → ${m.ip}`);
+  if(m.fw&&n.fw&&m.fw!==n.fw)slog('node','info',`${id} 韌體更新`,`v${n.fw} → v${m.fw}`);
+  if(m.uptime!=null&&n.boot!=null&&(S.t-m.uptime)-n.boot>30)slog('node','warn',`${id} 重新開機過`,`運行時間歸零（${Math.round(m.uptime)} 秒）`);
   if(m.rssi!=null)n.rssi=m.rssi;if(m.ip)n.ip=m.ip;if(m.fw)n.fw=m.fw;if(m.uptime!=null)n.boot=S.t-m.uptime;
   if(kind==='counter'){
-    if(m.in!=null){const d=m.in-(S.mqIn??m.in);if(d>0){hourAt(S.t).entries+=d;S.fx.push({type:'door'})}S.mqIn=m.in;S.today.entries=m.in}
-    if(m.out!=null)S.today.exits=m.out;
-    if(m.checkout!=null){const d=m.checkout-(S.mqCo??m.checkout);if(d>0){hourAt(S.t).checkouts+=d;S.fx.push({type:'pay'})}S.mqCo=m.checkout;S.today.checkouts=m.checkout}
-    if(m.occupancy!=null)S.mqttOcc=m.occupancy;if(m.queue!=null)S.queue=m.queue;
+    if(m.occupancy!=null)S.mqttOcc=m.occupancy;
+    if(m.in!=null){const d=m.in-(S.mqIn??m.in);if(d>0){hourAt(S.t).entries+=d;S.fx.push({type:'door'});rlog('in',d>1?`進場 ×${d}`:'進場',`場內 ${occ()}`)}
+      else if(d<0)slog('node','warn','entry-01 計數歸零',`進場 ${S.mqIn} → ${m.in}（板子重開或換日）`);S.mqIn=m.in;S.today.entries=m.in}
+    if(m.out!=null){const d=m.out-(S.mqOut??m.out);if(d>0)rlog('out',d>1?`離場 ×${d}`:'離場',`場內 ${occ()}`);S.mqOut=m.out;S.today.exits=m.out}
+    if(m.checkout!=null){const d=m.checkout-(S.mqCo??m.checkout);if(d>0){hourAt(S.t).checkouts+=d;S.fx.push({type:'pay'});rlog('pay','RFID 結帳',`第 ${m.checkout} 筆`)}S.mqCo=m.checkout;S.today.checkouts=m.checkout}
+    if(m.queue!=null)S.queue=m.queue;
     if(m.temp!=null)S.temp=m.temp;if(m.hum!=null)S.hum=m.hum;
-    S.gateOpen=m.gate!=null?!!m.gate:(S.gateMode==='open'||(S.gateMode==='auto'&&occ()<S.capacity));
+    const was=S.gateOpen;S.gateOpen=m.gate!=null?!!m.gate:(S.gateMode==='open'||(S.gateMode==='auto'&&occ()<S.capacity));if(was!==S.gateOpen)logGate();
     if(m.dwell_avg!=null){S.today.dwellSum=m.dwell_avg;S.today.dwellN=1}
-    if(['auto','open','closed'].includes(m.mode))S.gateMode=m.mode;if(m.capacity>=10&&m.capacity<=80)S.capacity=m.capacity;
+    if(['auto','open','closed'].includes(m.mode))S.gateMode=m.mode;
+    if(m.capacity>=10&&m.capacity<=80){if(m.capacity!==S.capacity)slog('node','info',`entry-01 回報人數上限 ${m.capacity} 人`,`儀表板原本是 ${S.capacity} 人`);S.capacity=m.capacity}
   }else{
     const z=S.zones[id.slice(-1)];if(!z)return;
     if(kind==='wifi'){if(m.raw!=null)z.raw=m.raw;if(m.dwell_avg!=null){z.dwellSum=m.dwell_avg;z.dwellN=1}S.fx.push({type:'wifi',node:id})}
@@ -188,31 +209,95 @@ function onMqtt(topic,m){
   fuse();
 }
 onMqtt.status=()=>{};
-function mqttCmd(node,payload){logMsg(`sga/${node}/cmd`,payload,'out');if(client&&S.source==='mqtt')client.publish(`sga/${node}/cmd`,JSON.stringify(payload))}
+function mqttCmd(node,payload){logMsg(`sga/${node}/cmd`,payload,'out');slog('cmd','info',`${node} ← ${payload.action}`,payload);if(client&&S.source==='mqtt')client.publish(`sga/${node}/cmd`,JSON.stringify(payload))}
 /* every message in or out, newest first; the 裝置 page shows it as a live console */
 function logMsg(topic,obj,dir='in'){const L=S.msgs||(S.msgs=[]);L.unshift({t:S.t,wall:Date.now(),topic,dir,sim:S.source==='sim',body:JSON.stringify(obj)});if(L.length>300)L.length=300;S.msgCount=(S.msgCount||0)+1}
-/* switching to real hardware: start today's numbers from zero at the real time of day (or 10:00 outside opening hours) */
-function resetForLive(){
-  const keep={speed:S.speed,capacity:S.capacity,threshold:S.threshold,gateMode:S.gateMode,whitelist:S.whitelist,kAuto:S.kAuto,notify:S.notify,k:S.k};
-  S=freshState();Object.assign(S,keep);S.preroll=false;
-  const d=new Date(),tod=d.getHours()*3600+d.getMinutes()*60+d.getSeconds();S.offHours=tod<OPEN||tod>=CLOSE;S.t=S.offHours?OPEN:tod;
-  NODE_DEFS.forEach(x=>{S.nodes[x.id].lastSeen=S.t;S.nodes[x.id].rssiHist=[]});S.agents=[];S.alertVer++;onLiveReset();
+function logGate(){slogOnce('gate',20,'flow',S.gateOpen?'info':'warn',S.gateOpen?'閘門開啟':'閘門關閉',`場內 ${occ()} / ${S.capacity} 人${S.queue?`，門外 ${S.queue} 人`:''}`)}
+
+/* ================= modes ================= */
+const KEEP=['speed','capacity','threshold','gateMode','whitelist','kAuto','notify','sound','k'];
+const keepSettings=()=>S?Object.fromEntries(KEEP.filter(k=>S[k]!==undefined).map(k=>[k,S[k]])):store.get('settings',{});
+/* 展示模式: the simulator runs from 10:00 up to the current time of day (or 15:12 outside opening hours) */
+function startDemo(){
+  const keep=keepSettings();S=freshState(false);Object.assign(S,keep);
+  const tod=wallTod(),START=(tod>OPEN+3600&&tod<CLOSE-1800)?Math.floor(tod):15*3600+12*60;
+  while(S.t<START){simStep(2);checkNodes();checkAlerts()}
+  S.preroll=false;NODE_DEFS.forEach(d=>S.nodes[d.id].lastSeen=S.t);S.alerts.forEach((a,i)=>a.ack=i>=3);S.alertVer++;
+  slog('sys','info','以展示模式開啟','資料由模擬器產生，這份日誌只存在這次開啟的頁面');
 }
+/* 真實模式: today starts empty (or from what this browser saved earlier today); nodes are unknown until they report */
+function startReal(){
+  const keep=keepSettings(),conn=S?.conn,url=S?.url;S=freshState(true);Object.assign(S,keep);S.t=wallTod();if(conn&&conn!=='idle')S.conn=conn,S.url=url;
+  const back=restoreReal();S.logs=loadLogs(S.date);
+  slog('sys','info',back?'開啟真實模式，接續今天稍早的資料':'開啟真實模式',back?`進場 ${S.today.entries} · 結帳 ${S.today.checkouts} · ${S.series.length} 分鐘的紀錄`:'今天的數字從 0 開始累積');
+}
+const resetForLive=()=>{startReal();onLiveReset()};
 onLiveReset=()=>{};
 function setSource(src){
-  S.source=src;
-  if(src==='sim'&&client){client.end(true);client=null}
+  if(src==='sim'&&S.real){saveReal();mqttDisconnect();startDemo();onLiveReset()}
+  S.source=src;store.set('mode',src==='sim'?'demo':'real');
   onSource();
 }
+const offHours=()=>S.t<OPEN||S.t>=CLOSE;
+
+/* ================= days: today's real data survives a reload; each finished day becomes a summary ================= */
+const loadHistory=()=>store.get('history',[]);
+function daySummary(){const occ5=[];
+  for(let k=0;k<144;k++){const t=OPEN+k*300,i=idxAt(t),p=i!=null?S.series[i]:null;occ5.push(p&&Math.abs(p.t-t)<600?p.occ:null)}
+  const d=new Date(S.date+'T12:00:00');
+  return {date:S.date,label:`${d.getMonth()+1}/${d.getDate()}`,sub:`週${'日一二三四五六'[d.getDay()]}`,entries:S.today.entries,checkouts:S.today.checkouts,
+    dwell:+dwellMin().toFixed(1),hourly:S.hourly.map(h=>h.entries),occ:occ5}}
+function archiveDay(sum){if(!sum||!sum.entries)return false;const h=loadHistory().filter(x=>x.date!==sum.date);h.push(sum);h.sort((a,b)=>a.date<b.date?-1:1);store.set('history',h.slice(-30));return true}
+function saveReal(){if(!S.real)return;S.savedAt=performance.now();
+  store.set('realDay',{date:S.date,today:S.today,hourly:S.hourly,offHour:S.offHour,series:S.series,alerts:S.alerts.slice(0,150),alertId:S.alertId,k:S.k,mqIn:S.mqIn,mqOut:S.mqOut,mqCo:S.mqCo,msgCount:S.msgCount,upt:S.upt,
+    zones:Object.fromEntries(ZONES.map(z=>[z.id,{dwellSum:S.zones[z.id].dwellSum,dwellN:S.zones[z.id].dwellN}])),summary:daySummary()});saveLogs()}
+function restoreReal(){const r=store.get('realDay',null);if(!r)return false;
+  if(r.date!==S.date){if(archiveDay(r.summary))slog('sys','info',`已封存 ${r.date} 的資料`,`進場 ${r.summary.entries} · 結帳 ${r.summary.checkouts}`);store.del('realDay');S.days=loadHistory().slice(-6);return false}
+  for(const k of['today','hourly','offHour','series','alerts','alertId','k','mqIn','mqOut','mqCo','msgCount','upt'])if(r[k]!==undefined)S[k]=r[k];
+  ZONES.forEach(z=>Object.assign(S.zones[z.id],r.zones?.[z.id]||{}));return true}
+/* midnight in 真實模式: save, archive today as a summary, start the new day empty */
+function rollover(){saveReal();const sum=daySummary(),old=S.date;archiveDay(sum);store.del('realDay');startReal();
+  slog('sys','info',`換日：已封存 ${old}`,`進場 ${sum.entries} · 結帳 ${sum.checkouts}`);onLiveReset()}
+
+/* "yesterday" is the most recent earlier day on record — real days in 真實模式, invented ones in 展示模式.
+   Every helper returns null when there is nothing to compare with, and the pages then say so. */
+const YK=()=>S.days.at(-1)||null;
+const yLabel=()=>{const y=YK();if(!y)return'';const d=new Date();d.setDate(d.getDate()-1);return y.date===dayKey(d)?'昨天':y.label};
+function yesterdayNow(){const y=YK();if(!y)return null;
+  if(y.hourly){const i=Math.floor((S.t-OPEN)/3600);if(i<0)return 0;let n=0;for(let k=0;k<Math.min(i,12);k++)n+=y.hourly[k]||0;if(i<12)n+=(y.hourly[i]||0)*((S.t-OPEN)%3600/3600);return n}
+  return y.entries*cumFrac(S.t)}
+function yOcc(t){const y=YK();if(!y)return null;
+  if(y.occ){const f=(t-OPEN)/300,a=y.occ[Math.floor(f)],b=y.occ[Math.ceil(f)];if(a==null&&b==null)return null;if(a==null||b==null)return a??b;return a+(b-a)*(f-Math.floor(f))}
+  if(S.real)return null;return lam(t/3600)*y.entries/CUM[720]*14}
+function yHour(h){const y=YK();if(!y||h<10||h>21)return null;if(y.hourly)return y.hourly[h-10]??null;if(S.real)return null;return y.entries*(CUM[(h-9)*60]-CUM[(h-10)*60])/CUM[720]}
+const yDwell=()=>YK()?.dwell??null;
+
+/* ================= log 日誌 =================
+   Every connection change, node event, hourly summary, alert, command and operator action, oldest first.
+   真實模式 keeps one list per day in localStorage (14 days); 展示模式 keeps it in memory only. */
+const LOGCAT={sys:'系統',conn:'連線',node:'節點',flow:'人流',alert:'告警',op:'操作',cmd:'指令'};
+const LOGLV={info:'資訊',warn:'警告',error:'錯誤'};
+function slog(cat,lv,msg,detail=''){if(!S||!S.logs)return;  // 展示模式 also logs while it simulates up to the current time
+  S.logs.push({ts:Date.now(),t:Math.round(S.t),cat,lv,msg,detail:typeof detail==='string'?detail:JSON.stringify(detail)});
+  if(S.logs.length>5000)S.logs.splice(0,S.logs.length-5000);S.logVer++;S.logDirty=true}
+const slogLast={};
+function slogOnce(key,cool,...a){const l=slogLast[key];if(l!=null&&Math.abs(S.t-l)<cool)return;slogLast[key]=S.t;slog(...a)}
+function saveLogs(){if(!S.real||!S.logDirty)return;S.logDirty=false;store.set('log:'+S.date,S.logs);
+  const days=store.get('logDays',[]);if(!days.includes(S.date)){days.push(S.date);days.sort();while(days.length>14)store.del('log:'+days.shift());store.set('logDays',days)}}
+const loadLogs=date=>store.get('log:'+date,[]);
+const logDays=()=>store.get('logDays',[]);
 
 /* ================= clock ================= */
 let lastTick=performance.now();
 function tick(){
   const now=performance.now(),real=Math.min(1,(now-lastTick)/1000);lastTick=now;
   if(S.paused)return;
-  if(S.source==='sim'){let d=real*S.speed;while(d>0){const st=Math.min(d,2);simStep(st);d-=st}S.lastData=now}
-  else{S.t+=real;S.acc5+=real;if(S.acc5>=5){S.acc5-=5;const hr=hourAt(S.t);ZONES.forEach(z=>hr.zsum[z.id]+=S.zones[z.id].stale?0:S.zones[z.id].est);hr.zn++}
-    S.acc60+=real;if(S.acc60>=60){S.acc60-=60;minute()}}
+  if(!S.real){let d=real*S.speed;while(d>0){const st=Math.min(d,2);simStep(st);d-=st}S.lastData=now}
+  else{if(dayKey()!==S.date){rollover();return}
+    const nt=wallTod(),dt=Math.max(0,nt-S.t);S.t=nt;  // 真實模式 follows the wall clock, even if the tab was in the background
+    S.acc5+=dt;if(S.acc5>=5){S.acc5%=5;const hr=hourAt(S.t);ZONES.forEach(z=>hr.zsum[z.id]+=S.zones[z.id].stale?0:S.zones[z.id].est);hr.zn++}
+    S.acc60+=dt;if(S.acc60>=60){S.acc60%=60;minute()}
+    if(now-(S.savedAt||0)>15000)saveReal()}
   checkNodes();checkAlerts();
 }
 
@@ -223,7 +308,6 @@ const vOcc=()=>snap()?.occ??occ(), vCap=()=>snap()?.cap??S.capacity, vGate=()=>{
 function idxAt(t){const s=S.series;if(!s.length)return null;let lo=0,hi=s.length-1;while(lo<hi){const m=(lo+hi+1)>>1;if(s[m].t<=t)lo=m;else hi=m-1}return lo}
 const heatOf=z=>{if(z.stale)return'stale';const r=z.est/S.threshold;return r>1?'hot':r>.6?'warm':'cool'};
 function zoneVals(zd){const sn=snap(),z=S.zones[zd.id];if(!sn||!sn.zones)return{est:z.est,raw:z.raw,stale:z.stale};const v=sn.zones[zd.id];return{est:v[2],raw:v[1],stale:!!v[3]}}
-const yesterdayNow=()=>S.days.at(-1).entries*cumFrac(S.t);
 const accNow=()=>S.today.base?Math.max(0,1-S.today.errEst/S.today.base):0;
 const accRaw=()=>S.today.base?Math.max(0,1-S.today.errRaw/S.today.base):0;
 const dwellMin=()=>S.today.dwellN?S.today.dwellSum/S.today.dwellN/60:0;
@@ -231,6 +315,7 @@ const peakToday=()=>{let p={occ:occ(),t:S.t};for(const s of S.series)if(s.occ>p.
 function persist(){store.set('settings',{capacity:S.capacity,threshold:S.threshold,gateMode:S.gateMode,kAuto:S.kAuto,whitelist:S.whitelist,speed:S.speed,notify:S.notify,sound:S.sound})}
 
 /* ================= export ================= */
+const storeName=()=>store.get('profile',{}).store||'我的門市';
 function buildCSV(){
   const rows=[['小時','進場','結帳','轉換率','Wi-Fi 原始誤差','校正後誤差']];
   S.hourly.forEach(h=>rows.push([`${pad(h.h)}:00`,h.entries,h.checkouts,h.entries?(h.checkouts/h.entries*100).toFixed(1)+'%':'',h.base?(h.errRaw/h.base*100).toFixed(1)+'%':'',h.base?(h.errEst/h.base*100).toFixed(1)+'%':'']));
@@ -238,6 +323,6 @@ function buildCSV(){
   rows.push([]);rows.push(['事件時間','等級','標題','說明','已處理']);S.alerts.forEach(a=>rows.push([hhmm(a.t),a.level,a.title,a.detail,a.ack?'是':'否']));
   return rows.map(r=>r.map(c=>/[",\n]/.test(String(c))?`"${String(c).replace(/"/g,'""')}"`:c).join(',')).join('\n');
 }
-function buildJSON(){return JSON.stringify({store:'信義旗艦店',date:new Date().toISOString().slice(0,10),time:hhmmss(S.t),capacity:S.capacity,threshold:S.threshold,k:+S.k.toFixed(3),
+function buildJSON(){return JSON.stringify({store:storeName(),mode:S.real?'real':'demo',date:new Date().toISOString().slice(0,10),time:hhmmss(S.t),capacity:S.capacity,threshold:S.threshold,k:+S.k.toFixed(3),
   today:S.today,hourly:S.hourly,series:S.series,alerts:S.alerts.map(a=>({t:hhmm(a.t),level:a.level,title:a.title,detail:a.detail,ack:a.ack})),
   nodes:NODE_DEFS.map(d=>{const n=S.nodes[d.id];return{id:d.id,online:n.online,rssi:n.rssi,ip:n.ip,fw:n.fw}})},null,2)}

@@ -24,7 +24,7 @@ function renderEvents(force){
   EV.seen=S.alerts[0]?.id||0;
   $('#evAckAll').disabled=!S.alerts.some(a=>!a.ack&&a.level!=='info');
 }
-function ackAll(){const L=S.alerts.filter(a=>!a.ack&&a.level!=='info');if(!L.length)return;L.forEach(a=>a.ack=true);S.alertVer++;renderBadges();renderEvents(true);renderBellList();
+function ackAll(){const L=S.alerts.filter(a=>!a.ack&&a.level!=='info');if(!L.length)return;L.forEach(a=>a.ack=true);S.alertVer++;slog('op','info',`全部標為已處理（${L.length} 則）`,'');renderBadges();renderEvents(true);renderBellList();
   toast('ok',`已處理 ${L.length} 則事件`,'',{label:'復原',fn:()=>{L.forEach(a=>a.ack=false);S.alertVer++;renderBadges();renderEvents(true)}})}
 function initEvents(){
   $('#evSeg').addEventListener('pick',e=>{EV.lv=e.detail.dataset.lv;renderEvents()});
@@ -34,7 +34,7 @@ function initEvents(){
   $('#evHist').addEventListener('click',e=>{const b=e.target.closest('.eh');if(!b||b.disabled)return;setEvHour(EV.h===+b.dataset.h?null:+b.dataset.h)});
   $('#evHistL').addEventListener('click',e=>{if(e.target.closest('#evHistX'))setEvHour(null)});
   $('#evList').addEventListener('click',e=>{
-    const ak=e.target.closest('[data-evack]');if(ak){const a=S.alerts.find(x=>x.id==ak.dataset.evack);a.ack=!a.ack;S.alertVer++;renderBadges();renderEvents(true);toast('ok',a.ack?'已標為處理':'已改回未處理',a.title);return}
+    const ak=e.target.closest('[data-evack]');if(ak){const a=S.alerts.find(x=>x.id==ak.dataset.evack);a.ack=!a.ack;S.alertVer++;slog('op','info',a.ack?`標為已處理：${a.title}`:`改回未處理：${a.title}`,'');renderBadges();renderEvents(true);toast('ok',a.ack?'已標為處理':'已改回未處理',a.title);return}
     const g=e.target.closest('[data-evgo]');if(g){const a=S.alerts.find(x=>x.id==g.dataset.evgo);goTarget(a.target);return}
     const row=e.target.closest('.ev');if(row){const id=+row.parentElement.dataset.id;EV.open=EV.open===id?null:id;renderEvents()}});
 }
