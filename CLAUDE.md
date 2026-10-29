@@ -1,27 +1,43 @@
 # StoreGA：給 Claude Code 的專案說明
 
-學校物聯網期中專題：ESP32（紅外線、RFID、Wi-Fi 探針、LD2410 雷達）→ MQTT → Node-RED（Aedes）→ 網頁儀表板。這個 repo 目前是儀表板與設計規範；ESP32 韌體與 Node-RED flow 不在這裡。
+學校物聯網期中專題，完整的 IoT 系統：ESP32 韌體 → MQTT → Node-RED（Aedes）→ 網頁儀表板。各部分的說明在各資料夾的 README。
 
 ## 跑起來
 
-- 不需要建置。直接開 `dashboard/index.html`，或 `npx serve dashboard`。
-- 預設是模擬器，不需要硬體。設定 → 資料來源可以連 `ws://…` 的 Aedes WebSocket。
+- 儀表板不需要建置：直接開 `dashboard/index.html`。預設是模擬器。
+- 本機真的 MQTT：`cd tools && npm install && npm run demo` → http://localhost:8080 → 設定 → 資料來源 → `ws://localhost:8080`。
 - 外部資源：Google Fonts、`unpkg.com/three@0.163.0`、`unpkg.com/mqtt@5.10.1`（需要網路）。
+- 全部測試：`sh scripts/test-all.sh`（需要 Node 18+ 與 g++；tools 的測試要先 `npm install`）。
 
-## 程式結構（`dashboard/assets/js/`，依載入順序）
+## 共同的協定
+
+`docs/mqtt.md` 是唯一的協定說明。改任何一邊的訊息格式，四個地方要一起改並跑測試：
+`firmware/common/storega_core.h`（JSON 產生）、`tools/fake-nodes.js`（模擬板子）、`node-red/functions/fusion.js`、`dashboard/assets/js/model.js` 的 `onMqtt()`。
+
+## 儀表板（`dashboard/assets/js/`，依載入順序）
 
 全部是 classic script（不是 ES module），刻意共用全域變數，這樣從 `file://` 打開也能動。
 
 | 檔案 | 負責 |
 | --- | --- |
-| `util.js` | `$`、`$$`、時間格式、`store`（localStorage）、亂數 |
-| `model.js` | 模擬器、感測融合、k 校正、心跳、告警 `addAlert`、MQTT 橋接、回放 `snap()` |
-| `ui.js` | 主題、提示框、toast、`popNum`／`morph`／`odo`（數字動態）、`beam`（光束）、`mxHTML`（點陣載入）、`spark`、`chart`、分段控制、popover、指令面板 |
-| `overview.js` 等 | 各頁的 `init*()` 與 `render*()` |
+| `util.js` | `$`、`$$`、時間格式、`store`（localStorage）、亂數、`download` |
+| `model.js` | 模擬器、感測融合、k 校正、心跳、告警 `addAlert`、MQTT 橋接 `onMqtt`／`mqttCmd`、訊息紀錄 `logMsg`、切到真實資料 `resetForLive`、回放 `snap()`、匯出 |
+| `ui.js` | 主題、提示框、toast、`popNum`／`morph`／`odo`（數字動態）、`beam`、`mxHTML`、`spark`、`chart`、分段控制、popover、指令面板、`chime`（告警聲） |
+| `overview.js` 等 | 各頁的 `init*()` 與 `render*()`；`devices.js` 含 MQTT 主控台；`settings.js` 含韌體 config.h 產生器 |
 | `twin.js` | three.js 3D 店面，第一次進「即時店況」才載入；顧客走 A* 網格 |
-| `app.js` | 路由（`#page` 或 `#settings/sub`）、上方列、快捷鍵、啟動與計時器 |
+| `app.js` | 路由（`#page` 或 `#settings/sub`）、上方列、橫幅、快捷鍵、啟動與計時器 |
 
-狀態都在全域 `S`（見 `freshState()`）。畫面每 0.8 秒重繪目前那一頁（分析、設定每 2.4 秒）。
+狀態都在全域 `S`（見 `freshState()`）。畫面每 0.8 秒重繪目前那一頁（分析、設定每 2.4 秒）。`dashboard/test/` 用 `vm` 載入 `util.js`＋`model.js` 測試，不需要瀏覽器。
+
+## 韌體（`firmware/`）
+
+- 純邏輯都在 `common/storega_core.h`（不呼叫 Arduino API）。**改 `common/` 之後要跑 `sh firmware/sync-common.sh`**，因為 Arduino 只編譯 sketch 資料夾內的檔案，每個 sketch 有一份副本；`firmware/test/run.sh` 會檢查副本是否同步。
+- `firmware/test/mock/` 是簡化的 Arduino 標頭檔，只用來做語法檢查，不代表真實 API 的全部行為。
+- `config.h` 不進 git；範本是 `config.example.h`，儀表板「設定 → 韌體設定」也能產生。
+
+## Node-RED（`node-red/`）
+
+function 節點的程式在 `functions/*.js`。改完要 `node node-red/build-flows.js` 重新產生 `flows.json` 並一起提交（`test-all.sh` 會檢查兩者同步）。
 
 ## 設計規範
 
@@ -32,6 +48,6 @@
 - 文字：中文 Noto Sans TC、數字 Geist Mono、場內人數大數字 Doto。文案用動詞開頭、說清楚做了什麼，並提供「復原」。
 - 等待：< 2 秒按鈕內跳點；2–3 秒 `mxHTML()` + 一句說明；> 3 秒再 `beam(el,'line'|'run')`。
 
-## 測試方式
+## 介面測試方式
 
-用 Playwright 開頁面，檢查 console 沒有錯誤、`document.documentElement.scrollWidth` 等於視窗寬度（日間、夜間、390px 手機都要）。無頭瀏覽器的 3D 建造動畫很慢，可用 `reducedMotion:'reduce'` 直接看建好的場景。
+用 Playwright 開頁面，檢查 console 沒有錯誤、`document.documentElement.scrollWidth` 等於視窗寬度（日間、夜間、390px 手機都要）。無頭瀏覽器的 3D 建造動畫很慢，可用 `reducedMotion:'reduce'` 直接看建好的場景；有毛玻璃（backdrop-filter）的畫面在軟體 GPU 模式下截圖會很慢，互動測試用一般模式啟動 Chromium。

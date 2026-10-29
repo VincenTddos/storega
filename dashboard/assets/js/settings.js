@@ -40,7 +40,7 @@ function initSettings(){
   $('#rulesForm').onsubmit=async e=>{e.preventDefault();const b=$('#rulesSave'),v=rulesRead(),t=b.innerHTML;b.style.width=b.offsetWidth+'px';b.classList.add('loading');await wait(700);
     const ch=[];if(v.capacity!==S.capacity)ch.push(`上限 ${S.capacity} → ${v.capacity} 人`);if(v.threshold!==S.threshold)ch.push(`門檻 ${S.threshold} → ${v.threshold} 人`);
     const gm=v.gateMode!==S.gateMode;Object.assign(S,{capacity:v.capacity,threshold:v.threshold,whitelist:v.whitelist});admit();persist();
-    mqttCmd('entry-01',{action:'capacity',value:S.capacity});if(gm)setGate(v.gateMode,true);
+    const thrCh=ch.some(x=>x.startsWith('門檻'));mqttCmd('entry-01',{action:'capacity',value:S.capacity});if(thrCh)mqttCmd('entry-01',{action:'threshold',value:S.threshold});if(gm)setGate(v.gateMode,true);
     b.classList.remove('loading');b.classList.add('done');b.innerHTML=icon('check',16)+'已儲存';rulesDirty();toast('ok','規則已儲存',(ch.join('，')||'設定已更新')+'，已同步到 entry-01');
     setTimeout(()=>{b.classList.remove('done');b.innerHTML=t;b.style.width='';rulesDirty()},1400)};
   $('#calBtn').onclick=runCalib;$('#fKauto').onchange=e=>{S.kAuto=e.target.checked;persist();renderSettings()};
