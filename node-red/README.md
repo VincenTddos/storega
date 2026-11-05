@@ -44,6 +44,14 @@ httpStatic: '/絕對路徑/storega/dashboard',
 
 重新啟動 Node-RED 後，打開 `http://<電腦 IP>:1880/` 就是儀表板，資料來源填 `ws://<電腦 IP>:8080`。
 
+**全部只用一個埠（1880）**：需要透過反向代理、雲端預覽或只能開一個埠時，改成
+
+```js
+httpStatic: [{ path: '/絕對路徑/storega/dashboard', root: '/dashboard/' }],
+```
+
+再雙擊 Aedes 節點，WebSocket 改成「綁定路徑」`/mqtt`。打開 `http://<電腦 IP>:1880/dashboard/`，儀表板會自動建議 `ws://<電腦 IP>:1880/mqtt`（https 頁面則是 `wss://…/mqtt`）；Node-RED 編輯器仍在 `http://<電腦 IP>:1880/`。
+
 ## 修改 flow 的程式
 
 function 節點的程式放在 `functions/*.js`，比較好讀也能測試。改完執行：

@@ -7,6 +7,8 @@ const hhmm=t=>`${pad(Math.floor(t/3600)%24)}:${pad(Math.floor(t/60)%60)}`;
 const hhmmss=t=>`${hhmm(t)}:${pad(Math.floor(t)%60)}`;
 const dayKey=(d=new Date())=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const wallTod=()=>{const d=new Date();return d.getHours()*3600+d.getMinutes()*60+d.getSeconds()+d.getMilliseconds()/1000};
+/* ws://host[:port][/path] — a path lets the broker share a port behind Node-RED or a reverse proxy (e.g. wss://host/mqtt) */
+const isWsUrl=v=>/^wss?:\/\/[^\s/:]+(:\d{2,5})?(\/[^\s]*)?$/.test(v);
 const pct1=v=>isFinite(v)?(v*100).toFixed(1):'—';
 const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const reduceMotion=RM;

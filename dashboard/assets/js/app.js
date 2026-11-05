@@ -82,11 +82,13 @@ function resetToday(){
 /* ---------- modes: 真實模式 (Node-RED) or 展示模式 (simulator) ---------- */
 function useReal(url,user,pass){closeChooser();if(user!==undefined){store.set('mqttUser',user);store.set('mqttPass',pass||'')}if(!S.real){startReal();onLiveReset()}S.conn='connecting';store.set('mode','real');store.set('mqttUrl',url);slog('sys','info','切換到真實模式',url);mqttConnect(url);renderShell();renderSettings()}
 function useDemo(){closeChooser();if(S.real){slog('sys','info','切換到展示模式','真實模式的資料已保存，切回來會接續');setSource('sim')}else store.set('mode','demo');renderShell();renderSettings()}
-const suggestUrl=()=>store.get('mqttUrl','')||(location.protocol.startsWith('http')&&location.hostname?`ws://${location.hostname}:8080`:'ws://localhost:8080');
+/* served by Node-RED's httpStatic under /dashboard/: MQTT shares the same origin at /mqtt (node-red/README.md) */
+const suggestUrl=()=>{const u=store.get('mqttUrl','');if(u)return u;if(!location.protocol.startsWith('http')||!location.hostname)return'ws://localhost:8080';
+  const ws=location.protocol==='https:'?'wss':'ws';return location.pathname.startsWith('/dashboard/')?`${ws}://${location.host}/mqtt`:`${ws}://${location.hostname}:8080`};
 function openChooser(){closePops();const sc=$('#modeScrim');$('#mcUrl').value=suggestUrl();$('#mcUser').value=store.get('mqttUser','');$('#mcPass').value=store.get('mqttPass','');sc.hidden=false;setTimeout(()=>$('#mcUrl').focus(),50)}
 function closeChooser(){$('#modeScrim').hidden=true}
 function bindChooser(){
-  const ok=v=>/^wss?:\/\/[^\s/:]+(:\d{2,5})?\/?$/.test(v);
+  const ok=isWsUrl;
   const go2=()=>{const v=$('#mcUrl').value.trim(),box=$('#mcBox');if(!ok(v)){box.classList.add('err');box.classList.remove('shake');void box.offsetWidth;box.classList.add('shake');$('#mcHelp').className='help err';$('#mcHelp').textContent='需要以 ws:// 開頭，例如 ws://192.168.50.10:8080';return}useReal(v,$('#mcUser').value.trim(),$('#mcPass').value)};
   $('#mcGo').onclick=go2;$('#mcPass').onkeydown=e=>{if(e.key==='Enter')go2()};$('#mcUrl').onkeydown=e=>{if(e.key==='Enter')go2()};$('#mcUrl').oninput=()=>{$('#mcBox').classList.remove('err');$('#mcHelp').className='help';$('#mcHelp').textContent='Node-RED 電腦的 IP，Aedes 的 WebSocket 埠（預設 8080）'};
   $('#mcDemo').onclick=useDemo;

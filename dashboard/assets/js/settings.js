@@ -67,10 +67,10 @@ function initSettings(){
     else if(!S.real){$('#mqUrl').focus();setSeg($('#srcSeg'),b=>(b.dataset.src==='mqtt')===S.real);$('#mqHelp').className='help';$('#mqHelp').textContent='輸入 Node-RED 的位址後按「連線並使用真實模式」。'}});
   $('#mqUrl').value=suggestUrl();
   $('#mqStop').onclick=()=>{mqttDisconnect();slog('conn','info','手動中斷連線','');$('#mqState').innerHTML='';renderShell();renderSettings();toast('info','已中斷與 Node-RED 的連線','仍在真實模式，畫面不會出現模擬資料。',{label:'重新連線',fn:()=>useReal($('#mqUrl').value.trim())})};
-  $('#mqUrl').oninput=e=>{const ok=/^wss?:\/\/[^\s/:]+(:\d{2,5})?\/?$/.test(e.target.value.trim()),h=$('#mqHelp');$('#mqBox').classList.toggle('err',!ok);h.className='help'+(ok?'':' err');h.textContent=ok?'格式正確。':'需要以 ws:// 或 wss:// 開頭，例如 ws://192.168.50.10:8080'};
+  $('#mqUrl').oninput=e=>{const ok=isWsUrl(e.target.value.trim()),h=$('#mqHelp');$('#mqBox').classList.toggle('err',!ok);h.className='help'+(ok?'':' err');h.textContent=ok?'格式正確。':'需要以 ws:// 或 wss:// 開頭，例如 ws://192.168.50.10:8080'};
   $('#mqUrl').onkeydown=e=>{if(e.key==='Enter')$('#mqGo').click()};
   $('#mqUser').value=store.get('mqttUser','');$('#mqPass').value=store.get('mqttPass','');
-  $('#mqGo').onclick=()=>{const v=$('#mqUrl').value.trim();if(!/^wss?:\/\/[^\s/:]+(:\d{2,5})?\/?$/.test(v)){mqStatus('err','');return}useReal(v,$('#mqUser').value.trim(),$('#mqPass').value)};
+  $('#mqGo').onclick=()=>{const v=$('#mqUrl').value.trim();if(!isWsUrl(v)){mqStatus('err','');return}useReal(v,$('#mqUser').value.trim(),$('#mqPass').value)};
   $$('[data-nt]').forEach(i=>{i.checked=!!S.notify[i.dataset.nt];i.onchange=()=>{S.notify[i.dataset.nt]=i.checked;persist()}});
   $('#themeSeg').addEventListener('pick',e=>setTheme(e.detail.dataset.t));
   $('#fMini').checked=store.get('mini',false);$('#fMini').onchange=e=>setMini(e.target.checked);

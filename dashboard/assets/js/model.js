@@ -170,7 +170,7 @@ function addAlert(key,level,title,detail,{cool=900,target=null,cat=null}={}){
 let client=null,onLiveReset;
 function loadMqtt(){return new Promise((res,rej)=>{if(window.mqtt)return res();const s=document.createElement('script');s.src='https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js';s.onload=res;s.onerror=()=>rej();document.head.appendChild(s)})}
 async function mqttConnect(url){
-  if(!/^wss?:\/\/[^\s/:]+(:\d{2,5})?\/?$/.test(url)){onMqtt.status('err','');return}
+  if(!isWsUrl(url)){onMqtt.status('err','');return}
   S.conn='connecting';S.url=url;onMqtt.status('busy','正在連線到 '+url);slog('conn','info',`連線到 ${url}`,'');
   try{await loadMqtt()}catch{S.conn='err';slog('conn','error','mqtt.js 載入失敗','需要網路才能從 unpkg.com 載入 MQTT 函式庫');onMqtt.status('err','mqtt.js 載入失敗，請確認電腦有網路。');return}
   if(client){client.end(true);client=null}
